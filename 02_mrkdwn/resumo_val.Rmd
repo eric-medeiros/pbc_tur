@@ -1,9 +1,13 @@
 ---
 title: "Resumo de Valoração"
-author: "Projeto Boto-Cinza"
+author: "Projeto Boto-Cinza --- IPeC"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
