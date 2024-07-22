@@ -3,9 +3,5 @@
 .RData
 .Ruserdata
 
-<<<<<<< HEAD
-02_mrkdwn/.html
-=======
 02_mrkdwn/*.html
->>>>>>> d923e0311e1e10f5ae3f49de794486a6b75e23a2
 03_results/*
