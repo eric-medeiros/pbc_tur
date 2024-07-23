@@ -3,5 +3,5 @@
 .RData
 .Ruserdata
 
-*.html
+02_mrkdwn/*.html
 03_results/*
