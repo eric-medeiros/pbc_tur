@@ -10,25 +10,48 @@ output:
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+atualiza_bruto <- FALSE
+atualiza_fino <- FALSE
 ```
 
-## R Markdown
+```{r dados_banco, include=FALSE}
+library(kableExtra)
+source("01_scripts/bd_banco.R")
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+# Definindo caminhos
+pasta_outputs <- file.path(rprojroot::find_rstudio_root_file(), "03_results")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+bd <- bd_banco(pasta_outputs, update_bruto = atualiza_bruto, update_fino = atualiza_fino)
 ```
 
-## Including Plots
+Tabelas
+===================================== 
 
-You can also embed plots, for example:
+Row {.tabset .tabset-pills}
+-----------------------------------------------------------------------
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+### Perguntas
+```{r}
+bd$perguntas[1:10,] %>%
+  kbl() %>%
+  kable_classic(c("hover")) %>%
+  scroll_box(height = "100%")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### Entrevistas
+```{r}
+bd$entrevistas[1:10,] %>%
+  kbl() %>%
+  kable_classic(c("hover")) %>%
+  scroll_box(height = "100%")
+```
+
+### Respostas
+```{r}
+bd$respostas[1:10,] %>%
+  kbl() %>%
+  kable_classic(c("hover")) %>%
+  scroll_box(height = "100%")
+```
+
+- Preparar val_
