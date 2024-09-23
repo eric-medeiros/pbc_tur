@@ -1,57 +1,404 @@
 ---
 title: "Resumo de Valoração"
 author: "Projeto Boto-Cinza --- IPeC"
-date: "`r Sys.Date()`"
 output: 
   flexdashboard::flex_dashboard:
-    orientation: rows
-    vertical_layout: fill
+    orientation: columns
 ---
 
 
-```{r setup, include=FALSE}
-atualiza_bruto <- FALSE
-atualiza_fino <- FALSE
-```
+```{r, include=FALSE}
+source("01_scripts/vl_dados.R")
+source("01_scripts/vl_stats.R")
+source("01_scripts/vl_graphs.R")
 
-```{r dados_banco, include=FALSE}
-library(kableExtra)
-source("01_scripts/bd_banco.R")
+library(DT)
+library(plotly)
 
 # Definindo caminhos
-pasta_outputs <- file.path(rprojroot::find_rstudio_root_file(), "03_results")
+pasta_proj <- file.path(rprojroot::find_rstudio_root_file())
 
-bd <- bd_banco(pasta_outputs, update_bruto = atualiza_bruto, update_fino = atualiza_fino)
+# Dados unificados para exibição
+dados_val <- vl_dados(pasta_proj)
+
+# Dados estatísticos e tabelas
+dados_stats <- vl_stats(dados_val)
+
+# Gráficos
+graphs <- vl_graphs(dados_stats)
 ```
 
-Tabelas
+Perguntas Valoração
+=====================================
+```{r}
+dados_val$base$perguntas_fetias %>%
+  datatable(options = list(pageLength = 20))
+```
+
+Dados cru
+=====================================
+
+## Banco(invisível)
+
+### Banco
+```{r}
+dados_val$base$dados_banco %>%
+  datatable(options = list(pageLength = 20))
+```
+
+## Excel {.tabset}
+
+### passeio_preco 
+```{r}
+dados_val$base$dados_excel$passeio_preco %>%
+  datatable(options = list(pageLength = 20))
+```
+
+### cidade_distancia
+```{r}
+dados_val$base$dados_excel$cidade_distancia %>%
+  datatable(options = list(pageLength = 20))
+```
+
+### cidade_posicao
+```{r}
+dados_val$base$dados_excel$cidade_posicao %>%
+  datatable(options = list(pageLength = 20))
+```
+
+### resposta_origem
+```{r}
+dados_val$base$dados_excel$resposta_origem %>%
+  datatable(options = list(pageLength = 20))
+```
+
+### ciadade_preco
+```{r}
+dados_val$base$dados_excel$ciadade_preco %>%
+  datatable(options = list(pageLength = 20))
+```
+
+### hospedagem_diaria
+```{r}
+dados_val$base$dados_excel$hospedagem_diaria %>%
+  datatable(options = list(pageLength = 20))
+```
+
+Custos
 ===================================== 
 
-Row {.tabset .tabset-pills}
+Column {data-width=300} {.tabset}
 -----------------------------------------------------------------------
 
-### Perguntas
+### $C_{transporte}$
 ```{r}
-bd$perguntas[1:10,] %>%
-  kbl() %>%
-  kable_classic(c("hover")) %>%
-  scroll_box(height = "100%")
+dados_val$interm$custo_transporte %>%
+  datatable(options = list(pageLength = 19))
 ```
 
-### Entrevistas
+### $C_{hospedagem}$
+
 ```{r}
-bd$entrevistas[1:10,] %>%
-  kbl() %>%
-  kable_classic(c("hover")) %>%
-  scroll_box(height = "100%")
+dados_val$interm$custo_hospedagem %>%
+  datatable(options = list(pageLength = 19))
 ```
 
-### Respostas
+### $C_{alimentacao}$
+
 ```{r}
-bd$respostas[1:10,] %>%
-  kbl() %>%
-  kable_classic(c("hover")) %>%
-  scroll_box(height = "100%")
+dados_val$interm$custo_alimentacao %>%
+  datatable(options = list(pageLength = 19))
 ```
 
-- Preparar val_
+### $C_{passeio}$
+
+```{r}
+dados_val$interm$custo_passeio %>%
+  datatable(options = list(pageLength = 19))
+```
+
+### $C_{tempo}$
+
+```{r}
+dados_val$interm$custo_tempo %>%
+  datatable(options = list(pageLength = 19))
+```
+
+### $Custos$
+```{r}
+dados_val$dados_val %>%
+  datatable(options = list(pageLength = 19))
+```
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+### Fórmulas
+
+$$C_{total}=C_{viagem}+C_{passeio}+C_{tempo}$$
+
+$$C_{viagem}=C_{\text{transporte}} + C_{hospedagem} + C_{alimentação}$$
+
+$$C_{transporte}=f(origem,\text{meio de transporte},tabela)$$
+
+$$C_{hospedagem}=f(n_{dias}, \text{tipo de hospedagem},tabela)$$
+
+$$C_{alimentação}=f(n_{dias}, tabela)$$
+
+$$C_{passeio}=f(destino,tabela)$$
+
+$$C_{tempo} = n_{dias} * (1/4 * R_d) \\
+R_d = R_m / 20 \\
+\text{se sem motivo, } n_{dias}=1/2$$
+
+Nossos resultados
+===================================== 
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Relação de valores
+
+```{r}
+ggplotly(graphs$g1)
+```
+
+### Média de custo calculado
+
+```{r}
+graphs$g2
+```
+
+### Curva de demanda - com motivo
+
+```{r}
+ggplotly(graphs$g3)
+```
+
+### Curva de demanda - sem motivo
+
+```{r}
+ggplotly(graphs$g4)
+```
+
+Column
+-----------------------------------------------------------------------
+
+### Estatísticas Atuais {data-height=300}
+- De um total de `r dados_stats$n_ent` pessoas que responderam ao questionário:
+  - **Moradores** = `r dados_stats$n_mor` (`r as.integer((dados_stats$n_mor/dados_stats$n_ent)*100)`% do total; `r as.integer((dados_stats$n_mor/(dados_stats$n_mor + dados_stats$n_tur))*100)`% dos válidos)
+  - **Turistas** = `r dados_stats$n_tur` (`r as.integer((dados_stats$n_tur/dados_stats$n_ent)*100)`% do total; `r as.integer((dados_stats$n_tur/(dados_stats$n_mor + dados_stats$n_tur))*100)`% dos válidos)
+  - **NA** = `r dados_stats$n_na` (`r as.integer((dados_stats$n_na/dados_stats$n_ent)*100)`% do total; --- )
+- Dos `r dados_stats$n_tur` turistas, `r (dados_stats$n_tur_cm_sna + dados_stats$n_tur_sm_sna)` (`r as.integer(((dados_stats$n_tur_cm_sna + dados_stats$n_tur_sm_sna)/dados_stats$n_tur)*100)`% dos turistas) também informaram renda mensal e gasto. Destes:
+  - **Com motivo ($T_{cM}$)** = `r dados_stats$n_tcm_fil` (`r as.integer((dados_stats$n_tcm_fil/(dados_stats$n_tur_cm_sna + dados_stats$n_tur_sm_sna))*100)`% dos <u>turistas</u> que informaram <u>renda</u> e <u>gasto</u>)
+  - **Sem motivo ($T_{sM}$)** = `r dados_stats$n_tsm_fil` (`r as.integer((dados_stats$n_tsm_fil/(dados_stats$n_tur_cm_sna + dados_stats$n_tur_sm_sna))*100)`% dos <u>turistas</u> que informaram <u>renda</u> e <u>gasto</u>)
+- Dados externos:
+  - Segundo FIPE/MTur, visitantes no município de Cananéia no ano de ???:
+    - `r as.character(dados_stats$n_nac)` **domésticos**
+    - `r as.character(dados_stats$n_int)` **internacionais**
+    - `r as.character(dados_stats$n_tot)` **totais**
+- **Temos:**
+  - $\bar{\mu}_{cM}=$ R\$ `r dados_stats$media_custo_cm %>% round(2)`/pessoa
+  - $\bar{\mu}_{sM}=$ R\$ `r dados_stats$media_custo_sm %>% round(2)`/pessoa
+  - $A_{cM}/n_{vis}=$ R\$ `r as.character(round(dados_stats$area_total_cm, 2))` / `r dados_stats$n_tur_cm_sna` pessoas
+  - $A_{sM}/n_{vis}=$ R\$ `r as.character(round(dados_stats$area_total_sm, 2))` / `r dados_stats$n_tur_sm_sna` pessoas
+  - $EC_{cM}=$ R\$ `r as.character(round(dados_stats$EC_cm, 2))`/pessoa
+  - $EC_{sM}=$ R\$ `r as.character(round(dados_stats$EC_sm, 2))`/pessoa
+  - $n_{total}=$ `r as.character(dados_stats$n_tot)` pessoas
+  - $á=w=P_{cM}=$ `r round(dados_stats$P_cm, 2)`
+  - $â=g=P_{sM}=$ `r round(dados_stats$P_sm, 2)`
+  - $EC_{total}=[(EC_{cM} * P_{cM} * n_{total}) + (EC_{sM} * P_{sM} * n_{total})]$
+  - $EC_{total}=$ [(`r as.character(round(dados_stats$EC_cm, 2))` * `r round(dados_stats$P_cm, 2)` * `r as.character(dados_stats$n_tot)`) + (`r as.character(round(dados_stats$EC_sm, 2))` * `r round(dados_stats$P_sm, 2)` * `r as.character(dados_stats$n_tot)`)]
+  - $EC_{total}=$ R\$ `r as.character(round(dados_stats$EC_total, 2))`
+
+
+### Teste Estatísticos {data-height=100}
+```{r incluse=FALSE}
+p_teste_t <- 
+  t.test(
+    dados_stats$dados$dados_val_tur_cm_sna$custo_c_boto,
+    dados_stats$dados$dados_val_tur_sm_sna$custo_c_boto,
+    paired = FALSE)$p.value
+
+p_shap_cm <- shapiro.test(dados_stats$dados$dados_val_tur_cm_sna$custo_c_boto)$p.value
+p_shap_sm <- shapiro.test(dados_stats$dados$dados_val_tur_sm_sna$custo_c_boto)$p.value 
+
+p_wilcox <- 
+  wilcox.test(
+    dados_stats$dados$dados_val_tur_cm_sna$custo_c_boto,
+    dados_stats$dados$dados_val_tur_sm_sna$custo_c_boto,
+    exact = FALSE)$p.value 
+```
+- **Teste t de Student:**
+  - $p=$ `r p_teste_t`
+- **Shapiro-Wilk de normalidade:**
+  - $p_{cm}=$ `r p_shap_cm`
+  - $p_{sm}=$ `r p_shap_sm`
+- **Mann-Whitney** (Wilcoxon para duas amostras independentes):
+  - $p=$ `r p_wilcox`
+
+Outros estudos
+===================================== 
+
+```{r, include=FALSE}
+conta_filla_12 <- ((74.36*(0.07*54000))+(5.45*(0.92*54000)))
+conta_filla_08 <- ((148.72*(0.0706*54000))+(10.89*(0.9294*54000)))
+conta_deoliveira_05 <- ((164.14*(0.295*29897))+(3.57*(0.705*29897)))
+```
+
+Column 
+-----------------------------------------------------------------------
+
+### Filla, 2008 - TESE
+**Fórmulas:**
+
+- $EC_{total}=EC_{p}+EC_{np}$
+- $Custos=T+[n*(1/4*R_d)]$
+- $Custos=\text{valor do passeio}+[(1/4*R_d)/2]$
+- $EC_{total}=EC_{p}*(á*n_{total})+EC_{np}*(â*n_{total})$
+
+**Sendo:**
+
+- $EC_{total}:$ excedente do consumidor total para 2006 e 2007
+- $CS_{p}:$ excedente do consumidor - com motivo
+- $CS_{np}:$ excedente do consumidor - sem motivo
+- $T:$ custo total da viagem declarado pelo turista/ n
+- $n:$ número de dias que o turista permanesceu em Cananéia
+- $R_d:$ rendimento diário
+- $á:$ razão dos turistas que foram para ver boto
+- $â:$ razão dos turistas que Não foram para ver boto mas viram
+- $n_{total}:$ número total de turistas que fizeram passeio entre 2006 e 2007
+
+**Resultados:**
+
+- $\bar{\mu}_{p}=$ R$ 457.94
+- $\bar{\mu}_{np}=$ R$ 34.50
+- $EC_{p}=$ R$ 148.72
+- $EC_{np}=$ R$ 10.89
+- $n_{total}=$ 54000
+- $á=$ 0.0706 (7.06%)
+- $â=$ 0.9394 (93.94%)
+- $EC_{total}=$ R$ 1113467.96
+- $\{[148.72*(0.0706*54000)]+[10.89*(0.9294*54000)]\}=$ `r as.character(conta_filla_08)`
+
+Column 
+-----------------------------------------------------------------------
+
+### Filla, 2012 - ARTIGO
+**Fórmulas:**
+
+- $CS_{total}=CS_{dw}+CS_{g}$
+- $CS_{dw}=T+[n*(1/4*R_d)]$
+- $CS_{g}=T+[(1/4*R_d)/2]$
+- $CS_{total}=CS_{dw}*(w*n_{total})+CS_{g}*(g*n_{total})$
+
+**Sendo:**
+
+- $CS_{total}:$ total consumer surplus for 2006 and 2007
+- $CS_{dw}:$ consumer surplus - com motivo
+- $CS_{g}:$ consumer surplus - sem motivo
+- $T:$ total cost of the trip as declared by the tourist
+- $n:$ number of days that the touris remained in Cananéia
+- $R_d:$ daily yield
+- $w:$ razão dos turistas que foram para ver boto
+- $g:$ razão dos turistas que Não foram para ver boto mas viram
+- $n_{total}:$ número total de turistas que fizeram passeio entre 2006 e 2007
+
+**Resultados:**
+
+- $\bar{\mu}_{dw}=$ US$ 228.97
+- $\bar{\mu}_{g}=$ US$ 17.25
+- $CS_{dw}=$ US$ 74.36
+- $CS_g=$ US$ 5.45
+- $n_{total}=$ 54000
+- $w=$ 0.07 (7%)
+- $g=$ 0.93 (93%)
+- $CS_{total}=$ US$ 556733.98
+- $\{[74.36*(0.07*54000)]+[5.45*(0.92*54000)]\}=$ `r as.character(conta_filla_12)`
+
+Column 
+-----------------------------------------------------------------------
+
+### De Olivera, 2005 - DISSERTAÇÃO
+**Fórmulas:**
+
+- $EC_{total}=EC_{p}+EC_{np}$
+- $V_{tempo}=1/4*R_d$
+- $EC_{total}=EC_{p}*(\alpha*n_{total})+EC_{np}*(\beta*n_{total})$
+
+**Sendo:**
+
+- $EC_{total}:$ excedente do consumidor total para o ano de 2004
+- $EC_{p}:$  excedente do consumidor - para OC
+- $EC_{np}:$  excedente do consumidor - nao para OC
+- $V_{tempo}:$ valor do tempo
+- $R_d:$ rendimento diário
+- $\alpha:$ razão turistas para OC
+- $\beta:$ razão turistas não para OC
+- $n_{total}:$ Número total de turistas que fizeram passeio em 2004
+
+**Resultados:**
+
+- $\bar{\mu}_{p}=$ 231.12 €
+- $\bar{\mu}_{np}=$ 51.65 €
+- $EC_{p}=$ 164.14 €
+- $EC_{np}=$ 3.57 €
+- $n_{total}=$ 29897
+- $\alpha=$ 0.295 (29,5%)
+- $\beta=$ 0.705 (70.5%)
+- $EC_{total}=$ 1522959.69 €
+- $\{([164.14*(0.295*29897)]+[3.57*(0.705*29897)]\}=$ `r as.character(conta_deoliveira_05)`
+
+Column 
+-----------------------------------------------------------------------
+
+### Chen, 2003 - ARTIGO
+**Fórmulas:**
+
+- $log(v_i/p_i)=\alpha+\beta_1TC_{total,i}+\beta_2TD_{i}+\beta_3ED_{i}$
+- $log(v_i/p_i)=\alpha+\beta_1TC_{total,i}+\beta_2TD_{i}+\beta_3I_{i}$
+- $V_{tempo}=1/3*R_d$
+
+**Sendo:**
+
+- $v_i:$ número de visitas à praia de turistas da região i
+- $p_i:$ população total da região i
+- $TC_{total}:$ custo de viagem por indivíduos da região i
+- $TD_i:$  variável dummy, 1 para local e 0 para o resto
+- $ED_i:$  % das pessoas  da região i com maior grau de escolaridade
+- $I_i:$ renda *per capita* média da região i
+
+**Resultados:**
+
+- $\alpha=$ 5.425
+- $\beta_1=$ -0.073
+- $\beta_2=$ 2.550
+- $\beta_3=$ 0.268
+- $\text{aggregate recreational benefit for the beach in 1999}=$ US$ 53.5 million
+
+BOs
+===================================== 
+
+- Gráficos para curva de procura ou de demanda:
+  - **Filla, 2008:**
+    - Preço (custo) por Quantidade (visitas) - Intro
+    - Preço (R$) por Número de pessoas - Resultado
+  - **Filla, 2012:**
+    - Cost (US$) por Number of people - Results and Discussion
+  - **De Oliveira, 2005:**
+    - Custo total (€) por Turista n.º
+  - **Chen, 2003:**
+    - Cria por origem e faz regressões...
+  - Literatura para "curva de demanda" ou "curva de procura"
+    - Preço pago por quantidade comprada
+    
+- Ver:
+  - $P_{cm}$ e $P_{sm}$:
+    - Se tem pelo menos ver boto, é com motivo
+    - Se só marcou ver boto?
+  - Rever valores excel:
+    - passeio
+    - viagem
+    - hospedagem
+  - Rever valor HARDCODE:
+    - alimentação (arrumar em "vl_dados.R")
