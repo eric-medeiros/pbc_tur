@@ -1,14 +1,10 @@
 # Função para processar metadados de perguntas
-bd_limpa_metadados <- function( pasta_output ) {
+bd_limpa_metadados <- function( dados_metadados ) {
   library(dplyr)
   library(tidyr)
   library(purrr)
   library(stringr)
   library(tibble)
-  
-  caminho_dados_brutos <- file.path(pasta_output, "SM_bruto")
-  caminho_metadados_bruto <- list.files(caminho_dados_brutos, full.names = TRUE, pattern = "metadados")
-  dados_metadados <- readRDS(caminho_metadados_bruto)
   
   # DEFININDO FUNÇÕES ----
   # Função para extrair dados comuns de uma pergunta
@@ -89,6 +85,16 @@ bd_limpa_metadados <- function( pasta_output ) {
       processar_pergunta(page, question)
     })
   })
+  
+  
+  # -------------------------------
+  # page <- dados_metadados$pages[[12]]
+  # question <- page$questions[[1]]
+  # proc_dados_comuns(page, question)
+  # proc_choices(question$answers$choices)
+  # proc_rows(question$answers$rows)
+  # --------------------------------------
+  
   
   # Limpar e transformar os dados
   perguntas <- 
