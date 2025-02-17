@@ -7,6 +7,19 @@ output:
 ---
 
 
+```{r novo_setup, include=FALSE}
+source("01_scripts/vl_dados.R")
+source("01_scripts/vl_mt_pizza.R")
+
+# Definindo caminhos
+pasta_proj <- file.path(rprojroot::find_rstudio_root_file())
+
+# Dados unificados para exibição
+dados_val <- vl_dados(pasta_proj)
+
+graf_mt_pizza <- vl_mt_pizza(dados_val)
+```
+
 ```{r, include=FALSE}
 source("01_scripts/vl_dados.R")
 source("01_scripts/vl_stats.R")
@@ -28,59 +41,20 @@ dados_stats <- vl_stats(dados_val)
 graphs <- vl_graphs(dados_stats)
 ```
 
+
 Perguntas Valoração
 =====================================
 ```{r}
-dados_val$base$perguntas_fetias %>%
+dados_val$perguntas_fetias %>%
   datatable(options = list(pageLength = 20))
 ```
 
-Dados cru
+Custos calculados
 =====================================
 
-## Banco(invisível)
-
-### Banco
+### Dados
 ```{r}
-dados_val$base$dados_banco %>%
-  datatable(options = list(pageLength = 20))
-```
-
-## Excel {.tabset}
-
-### passeio_preco 
-```{r}
-dados_val$base$dados_excel$passeio_preco %>%
-  datatable(options = list(pageLength = 20))
-```
-
-### cidade_distancia
-```{r}
-dados_val$base$dados_excel$cidade_distancia %>%
-  datatable(options = list(pageLength = 20))
-```
-
-### cidade_posicao
-```{r}
-dados_val$base$dados_excel$cidade_posicao %>%
-  datatable(options = list(pageLength = 20))
-```
-
-### resposta_origem
-```{r}
-dados_val$base$dados_excel$resposta_origem %>%
-  datatable(options = list(pageLength = 20))
-```
-
-### ciadade_preco
-```{r}
-dados_val$base$dados_excel$ciadade_preco %>%
-  datatable(options = list(pageLength = 20))
-```
-
-### hospedagem_diaria
-```{r}
-dados_val$base$dados_excel$hospedagem_diaria %>%
+dados_val$custos %>%
   datatable(options = list(pageLength = 20))
 ```
 
@@ -92,41 +66,52 @@ Column {data-width=300} {.tabset}
 
 ### $C_{transporte}$
 ```{r}
-dados_val$interm$custo_transporte %>%
+dados_val$custos %>%
+  select(response_id, meio, municipio, uf, km_rod, custo_km_individual, custo_transporte) %>%
   datatable(options = list(pageLength = 19))
 ```
 
 ### $C_{hospedagem}$
-
 ```{r}
-dados_val$interm$custo_hospedagem %>%
+dados_val$custos %>%
+  select(response_id, hospedagem, perm, preco_diaria, custo_hospedagem) %>%
   datatable(options = list(pageLength = 19))
 ```
 
 ### $C_{alimentacao}$
-
 ```{r}
-dados_val$interm$custo_alimentacao %>%
+dados_val$custos %>%
+  select(response_id, perm, preco_alimentacao_ref, custo_alimentacao) %>%
   datatable(options = list(pageLength = 19))
 ```
 
 ### $C_{passeio}$
-
 ```{r}
-dados_val$interm$custo_passeio %>%
+dados_val$custos %>%
+  select(data_passeio, custo_passeio) %>%
+  unnest(cols = c(data_passeio)) %>%
   datatable(options = list(pageLength = 19))
 ```
 
 ### $C_{tempo}$
-
 ```{r}
-dados_val$interm$custo_tempo %>%
+dados_val$custos %>%
+  select(response_id, renda, Rd, custo_tempo_integral, custo_tempo_parcial) %>%
   datatable(options = list(pageLength = 19))
 ```
 
 ### $Custos$
 ```{r}
-dados_val$dados_val %>%
+dados_val$custos %>%
+  select(
+    response_id,
+    motivo_boto,
+    custo_transporte,
+    custo_hospedagem,
+    custo_alimentacao,
+    custo_passeio,
+    custo_tempo_integral,
+    custo_tempo_parcial) %>%
   datatable(options = list(pageLength = 19))
 ```
 
@@ -157,28 +142,54 @@ Nossos resultados
 Column {.tabset}
 -----------------------------------------------------------------------
 
-### Relação de valores
-
+### M, TcM, Tsm, NA - Pizza
 ```{r}
-ggplotly(graphs$g1)
+graf_mt_pizza
+```
+
+### Hospedagem sem custo 0
+```{r}
+graphs$g1$g_fil 
+```
+
+### Permanência
+```{r}
+graphs$g3
+```
+
+### Previsão
+```{r}
+graphs$g4
+```
+
+### Passeio de boto-cinza
+```{r}
+graphs$g5
+```
+
+### Passeio de barco
+```{r}
+graphs$g6
+```
+
+### Relação de valores
+```{r}
+ggplotly(graphs$g7)
 ```
 
 ### Média de custo calculado
-
 ```{r}
-graphs$g2
+graphs$g8
 ```
 
 ### Curva de demanda - com motivo
-
 ```{r}
-ggplotly(graphs$g3)
+ggplotly(graphs$g9)
 ```
 
 ### Curva de demanda - sem motivo
-
 ```{r}
-ggplotly(graphs$g4)
+ggplotly(graphs$g10)
 ```
 
 Column
@@ -391,14 +402,3 @@ BOs
     - Cria por origem e faz regressões...
   - Literatura para "curva de demanda" ou "curva de procura"
     - Preço pago por quantidade comprada
-    
-- Ver:
-  - $P_{cm}$ e $P_{sm}$:
-    - Se tem pelo menos ver boto, é com motivo
-    - Se só marcou ver boto?
-  - Rever valores excel:
-    - passeio
-    - viagem
-    - hospedagem
-  - Rever valor HARDCODE:
-    - alimentação (arrumar em "vl_dados.R")

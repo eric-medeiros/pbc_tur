@@ -22,11 +22,11 @@ vl_banco <- function(bd){
     unnest(cols = c(data)) %>%
     unnest(cols = c(data)) %>%
     group_by(response_id) %>%
-    transmute(publico = case_match(
+    mutate(publico = case_match(
       resposta,
-      "Desejo não responder (e encerrar o questionário)" ~ NA,
-      "Estou visitando Cananéia" ~ "T",
-      "Moro em Cananéia" ~ "M"
+      "Desejo n\u00e3o responder (e encerrar o question\u00e1rio)" ~ NA,
+      "Estou visitando Canan\u00e9ia" ~ "T",
+      "Moro em Canan\u00e9ia" ~ "M"
     ))
   
   # MEIO DE TRANSPORTE ----
@@ -287,7 +287,18 @@ vl_banco <- function(bd){
       passeio
     ) %>%
     reduce(full_join, by = "response_id") %>%
-    select(response_id, motivo_boto, publico, meio, perm, renda, hospedagem, cia, gasto, n_pessoas, passeio_data)
-  
-  return(result)
+    select(response_id, motivo_boto, publico, meio, perm, renda, hospedagem, cia, gasto, n_pessoas, passeio_data) %>%
+    ungroup() %>%
+    mutate(publico_motivo = case_when(
+      motivo_boto == TRUE & publico == "T" ~ "Turistas com motivo",
+      motivo_boto == FALSE & publico == "T" ~ "Turistas sem motivo",
+      publico == "M" ~ "Moradores",
+      TRUE ~ "NA")) %>%
+    group_by(response_id)
+    
+    return(result)
 }
+
+
+
+

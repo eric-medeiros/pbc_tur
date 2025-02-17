@@ -1,8 +1,8 @@
 vl_dados <- function(pasta_proj) {
   # Carregar pacotes
-  library(dplyr)
-  library(tidyr)
-  library(purrr)
+  require(dplyr)
+  require(tidyr)
+  require(purrr)
   
   source("01_scripts/bd_banco.R")
   source("01_scripts/vl_banco.R")
@@ -28,12 +28,55 @@ vl_dados <- function(pasta_proj) {
     }
   }
   
-  perguntas_fetias <- 
-    bd$perguntas %>%
-    select(pergunta_num, pergunta_id, pergunta_nome, pergunta_tipo, pergunta_publico) %>%
-    unique() %>%
-    filter(
-      pergunta_id %in% c(
+  # Cálculo de custo de transporte
+  custo_transporte <- 
+    dados_banco %>%
+    select(response_id, meio) %>%
+    left_join(dados_excel$resposta_origem %>% select(response_id, municipio, uf), by = "response_id") %>%
+    left_join(dados_excel$cidade_distancia %>% select(municipio, uf, km_rod), by = c("municipio", "uf")) %>%
+    left_join(dados_excel$preco_km_geral %>% select(meio, custo_km_individual), by = "meio") %>%
+    mutate(custo_transporte = custo_km_individual * km_rod)
+  
+  # Cálculo de custo de hospedagem
+  custo_hospedagem <- 
+    dados_banco %>%
+    select(response_id, hospedagem, perm) %>%
+    left_join(dados_excel$hospedagem_diaria, by = "hospedagem") %>%
+    mutate(custo_hospedagem = preco_diaria * as.numeric(perm))
+  
+  # Cálculo de custo de alimentação
+  custo_alimentacao <-
+    dados_banco %>%
+    select(response_id, perm) %>%
+    mutate(
+      preco_alimentacao_ref = dados_excel$preco_alimentacao[[2,3]],
+      custo_alimentacao = as.numeric(perm) * preco_alimentacao_ref * 2.25)
+  
+  custo_passeio <- 
+    dados_banco %>%
+    select(response_id, passeio_data, publico) %>%
+    unnest(cols = passeio_data, keep_empty = TRUE) %>%  # Mantém os dados detalhados
+    left_join(dados_excel$passeio_preco, by = c("resposta_id", "resposta_nome", "publico")) %>%
+    group_by(response_id) %>%
+    nest() %>%
+    rename(data_passeio = data) %>%
+    mutate(custo_passeio = map_dbl(data_passeio, ~ sum(as.numeric(.x$preco_passeio))))
+  
+  # Cálculo de custo de tempo (integral e parcial)
+  custo_tempo <- 
+    dados_banco %>%
+    select(response_id, renda, perm) %>%
+    mutate(
+      Rd = as.numeric(renda) / 20,  # Ajuste para o cálculo da renda
+      custo_tempo_integral = (Rd / 4) * as.numeric(perm),  # Custo de tempo integral
+      custo_tempo_parcial = (Rd / 4)/2)
+  
+  # Consolidando todos os custos
+  result <- list(
+    perguntas_feitas = bd$perguntas %>%
+      select(pergunta_num, pergunta_id, pergunta_nome, pergunta_tipo, pergunta_publico) %>%
+      unique() %>%
+      filter(pergunta_id %in% c(
         '151230060', # público
         '162823740', # motivo
         '151230104', # passeios_T
@@ -47,135 +90,15 @@ vl_dados <- function(pasta_proj) {
         '151230110', # gasto_previsto_familia
         '151230083', # renda_T
         '151426421', # renda_M
-        '151499315'  # passeios_M
-      ))
-  
-  # Gasto previsto
-  gasto_previsto <- 
-    dados_banco %>%
-    mutate(gasto_previsto = round_if_numeric(gasto)) %>%
-    select(response_id, gasto_previsto)
-  
-  # Cálculo de custo de transporte
-  custo_transporte <- 
-    dados_banco %>%
-    select(response_id, meio, motivo_boto) %>%
-    left_join(dados_excel$resposta_origem, by = "response_id") %>%
-    left_join(
-      dados_excel$ciadade_preco %>%
-        pivot_longer(3:10, names_to = "meio", values_to = "custo_transporte", values_drop_na = TRUE),
-      by = c("municipio", "uf", "meio")
-    ) %>%
-    mutate(custo_transporte = case_when(
-      motivo_boto == TRUE ~ round_if_numeric(custo_transporte),
-      TRUE ~ NA_real_
-    )) %>%
-    select(-resposta)
-  
-  # Cálculo de custo de hospedagem
-  custo_hospedagem <- 
-    dados_banco %>%
-    select(response_id, hospedagem, perm, motivo_boto) %>%
-    left_join(dados_excel$hospedagem_diaria, by = "hospedagem") %>%
-    mutate(custo_hospedagem = case_when(
-      motivo_boto == TRUE ~ round_if_numeric(as.numeric(valor) * as.numeric(perm))
-    ))
-  
-  # Cálculo de custo de alimentação - ARRUMAR ALIMENTAÇÃO AQUI
-  custo_alimentacao <-
-    dados_banco %>%
-    select(response_id, perm, motivo_boto) %>%
-    mutate(custo_alimentacao = case_when(
-      motivo_boto == TRUE ~ round_if_numeric(as.numeric(perm) * 0)
-    ))
-  
-  # Cálculo de custo de passeio
-  custo_passeio <- 
-    dados_banco %>%
-    select(response_id, passeio_data, publico, motivo_boto) %>%
-    unnest(cols = passeio_data, keep_empty = TRUE) %>%
-    left_join(dados_excel$passeio_preco, by = c("resposta_id", "resposta_nome", "publico")) %>%
-    group_by(response_id, motivo_boto) %>%
-    summarise(
-      custo_passeio = sum(as.numeric(preco)) %>% round_if_numeric(), 
-      .groups = "drop"
-    )
-  
-  # Cálculo de custo de tempo
-  custo_tempo <- 
-    dados_banco %>%
-    select(response_id, publico, renda, perm, motivo_boto) %>%
-    mutate(
-      Rd = as.numeric(renda) / 20,
-      custo_tempo = case_when(
-        motivo_boto == TRUE ~ round_if_numeric((Rd / 4) * as.numeric(perm)),
-        motivo_boto == FALSE ~ round_if_numeric((Rd / 4) / 2)
-      )
-    )
-  
-  # Consolidar resultados
-  result <-
-    list(
-      base = list(
-        dados_banco = dados_banco,
-        dados_excel = dados_excel,
-        perguntas_fetias = perguntas_fetias
-      ),
-      interm = list(
-        gasto_previsto = gasto_previsto,
-        custo_transporte = custo_transporte,
-        custo_hospedagem = custo_hospedagem,
-        custo_alimentacao = custo_alimentacao,
-        custo_passeio = custo_passeio,
-        custo_tempo = custo_tempo
-      ))
-  
-  # 1- Dados da valoração
-  result$dados_val <- 
-    result$interm %>%
-    reduce(left_join, by = "response_id") %>%
-    select(
-      response_id,
-      publico,
-      motivo_boto = motivo_boto.x,
-      custo_transporte,
-      custo_hospedagem,
-      custo_alimentacao,
-      custo_passeio,
-      custo_tempo,
-      gasto_previsto
-    ) %>%
-    mutate(across(custo_transporte:custo_tempo, round_if_numeric)) %>%
-    rowwise() %>%
-    mutate(custo_c_boto = sum(c_across(custo_transporte:custo_tempo), na.rm = TRUE)) %>%
-    group_by(response_id)
-  
-  # 2- Dados da valoração de turistas
-  result$dados_val_tur <- 
-    result$dados_val %>%
-    filter(publico == "T")
-  
-  # 3- Dados da valoração de turistas com motivo sem NAs
-  result$dados_val_tur_cm_sna <- 
-    result$dados_val_tur %>%
-    filter(motivo_boto) %>%
-    drop_na() %>%
-    arrange(-custo_c_boto) %>%
-    ungroup() %>%
-    mutate(Obs = row_number())
-  
-  # 4- Dados da valoração de turistas sem motivo sem NAs
-  result$dados_val_tur_sm_sna <- 
-    result$dados_val_tur %>%
-    filter(!motivo_boto) %>%
-    drop_na(-custo_transporte, -custo_hospedagem, -custo_alimentacao) %>%
-    arrange(-custo_c_boto) %>%
-    ungroup() %>%
-    mutate(Obs = row_number())
-  
-  # 5- Dados da valoração de turistas sem NAs
-  result$dados_val_tur_sna <- 
-    bind_rows(result$dados_val_tur_cm_sna, result$dados_val_tur_sm_sna)
+        '151499315')),  # passeios_M
+    
+    respostas = dados_banco[,c("response_id", "motivo_boto", "publico", "publico_motivo")] %>%
+      left_join(custo_transporte, by = "response_id") %>%
+      left_join(custo_hospedagem, by = c("response_id")) %>%
+      left_join(custo_alimentacao, by = c("response_id", "perm")) %>%
+      left_join(custo_passeio, by = "response_id") %>%
+      left_join(custo_tempo, by = c("response_id", "perm"))
+  )
   
   return(result)
 }

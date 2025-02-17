@@ -1,0 +1,16 @@
+---
+title: "Teste de Figura"
+output: html_document
+---
+
+## Gráfico de Pizza
+
+Abaixo está a figura `pizza.pdf` carregada usando `knitr::include_graphics`:
+
+```{r, echo=FALSE}
+knitr::include_graphics("03_results/pizza.pdf")
+```
+
+```{r, echo=FALSE}
+knitr::include_graphics("03_results/pizza.png")
+```
