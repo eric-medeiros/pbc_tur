@@ -13,6 +13,11 @@ source("01_scripts/vl_ec.R")
 source("01_scripts/vl_mt_pizza.R")
 
 library(DT)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(plotly)
 
 # Definindo caminhos
 pasta_proj <- file.path(rprojroot::find_rstudio_root_file())
@@ -27,39 +32,24 @@ ec <- vl_ec(dados_val)
 graf_mt_pizza <- vl_mt_pizza(dados_val)
 ```
 
-```{r, include=FALSE}
-# source("01_scripts/vl_dados.R")
-# source("01_scripts/vl_stats.R")
-# source("01_scripts/vl_graphs.R")
-# 
-# 
-# library(plotly)
-# 
-# # Definindo caminhos
-# pasta_proj <- file.path(rprojroot::find_rstudio_root_file())
-# 
-# # Dados unificados para exibição
-# dados_val <- vl_dados(pasta_proj)
-# 
-# # Dados estatísticos e tabelas
-# dados_stats <- vl_stats(dados_val)
-# 
-# # Gráficos
-# graphs <- vl_graphs(dados_stats)
-```
-
-
-Perguntas Valoração
+Perguntas
 =====================================
 ```{r}
 dados_val$perguntas_feitas %>%
   datatable(options = list(pageLength = 20))
 ```
 
-Custos por custo
+Cálculo de Custos
 ===================================== 
 Column {data-width=300}{.tabset}
 -----------------------------------------------------------------------
+### RESUMO
+```{r}
+dados_val$respostas %>%
+  select(publico_motivo, custo_transporte, custo_hospedagem, custo_alimentacao, custo_passeio, custo_tempo_integral, custo_tempo_parcial) %>%
+  mutate(across(custo_transporte:custo_tempo_parcial, ~ round(.x, 1))) %>%
+  datatable(options = list(pageLength = 20))
+```
 ### $C_{transporte}$
 ```{r}
 dados_val$respostas %>%
@@ -91,6 +81,7 @@ dados_val$respostas %>%
   select(response_id, renda, Rd, custo_tempo_integral, custo_tempo_parcial) %>%
   datatable(options = list(pageLength = 19))
 ```
+
 Column {data-width=200}
 -----------------------------------------------------------------------
 ### Fórmulas
@@ -111,85 +102,173 @@ $$C_{tempo} = n_{dias} * (1/4 * R_d) \\
 R_d = R_m / 20 \\
 \text{se sem motivo, } n_{dias}=1/2$$
 
-Resumo dos Custos por custo
+Exploratória
 ===================================== 
-Column {.tabset}
------------------------------------------------------------------------
-### $C_{transporte}$
-```{r}
-library(dplyr)
-library(knitr)
-library(kableExtra)
-
-dados_val$respostas %>%
-  transpose()
-  ungroup() %>%
-  summarise(mean = mean(km_rod, na.rm = TRUE))
-
-
-# Seleciona apenas as colunas relevantes
-tabela_resumo_custos
-
-tibble(dado = c("km_rod", "b", "c"),
-       min = min(dados_val$respostas$km_rod, na.rm = TRUE))
-
-dados_transporte <- min(dados_val$respostas$km_rod, na.rm = TRUE) %>%
-  group_by(km_rod, custo_km_individual, custo_transporte) %>%
-  summarise(
-    Min = min(.),
-    Max = max(.),
-    Média = mean(.),
-    Mediana = median(.),
-    `Desvio Padrão` = sd(.)
-  )
-
-# Cria a tabela formatada
-kable(dados_transporte, format = "html", caption = "Estatísticas de Transporte") %>%
-  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
-```
-### $C_{hospedagem}$
-```{r}
-dados_val$respostas %>%
-  select(preco_diaria, custo_hospedagem) %>%
-  summary() %>%
-  as.data.frame() %>%
-  datatable()
-```
-### $C_{alimentacao}$
-```{r}
-dados_val$respostas %>%
-  select(preco_alimentacao_ref, custo_alimentacao) %>%
-  summary() %>%
-  as.data.frame() %>%
-  datatable()
-```
-### $C_{passeio}$
-```{r}
-dados_val$respostas %>%
-  select(custo_passeio) %>%
-  summary() %>%
-  as.data.frame() %>%
-  datatable()
-```
-### $C_{tempo}$
-```{r}
-dados_val$respostas %>%
-  select(renda, Rd, custo_tempo_integral, custo_tempo_parcial) %>%
-  summary() %>%
-  as.data.frame() %>%
-  datatable()
-```
-### $C_{Custos}$
-```{r}
-dados_val$respostas %>%
-  select(custo_transporte, custo_hospedagem, custo_alimentacao, custo_passeio, custo_tempo_integral, custo_tempo_parcial) %>%
-  summary() %>%
-  as.data.frame() %>%
-  datatable()
-```
 Column
 -----------------------------------------------------------------------
+### Dados numéricos
+```{r}
+# Define a ordem desejada (mesmo do select) e os nomes para exibição
+ordem <- c("perm", "custo_alimentacao", "custo_transporte", 
+           "custo_km_individual", "custo_hospedagem", "custo_passeio", 
+           "renda", "Rd")
 
+nomes_exibicao <- c(
+  perm = "Dias de Permanência",
+  custo_alimentacao = "Custo de Alimentação",
+  custo_km_individual = "Custo por km",
+  custo_transporte = "Custo de Transporte",
+  custo_hospedagem = "Custo de Hospedagem",
+  custo_passeio = "Custo de Passeio",
+  renda = "Renda Mensal",
+  Rd = "Renda Diária"
+)
+
+dados_val$respostas %>%
+  ungroup() %>%
+  mutate(perm = as.numeric(perm),
+         renda = as.numeric(renda)) %>%
+  select(perm, custo_alimentacao, custo_transporte, custo_km_individual, 
+         custo_hospedagem, custo_passeio, renda, Rd) %>%
+  pivot_longer(cols = everything(), names_to = "variavel", values_to = "valor") %>%
+  # Define a variável como fator com a ordem desejada
+  mutate(variavel = factor(variavel, levels = ordem)) %>%
+  group_by(variavel) %>%
+  summarise(
+    n = n(),
+    n_sna = sum(!is.na(valor)),
+    Min = min(valor, na.rm = TRUE),
+    Max = max(valor, na.rm = TRUE),
+    Media = mean(valor, na.rm = TRUE),
+    Mediana = median(valor, na.rm = TRUE),
+    DP = sd(valor, na.rm = TRUE)
+  ) %>%
+  arrange(variavel) %>%
+  # Recodifica os nomes para os de exibição
+  mutate(variavel = recode(variavel, !!!nomes_exibicao)) %>%
+  kable(
+    col.names = c("Variável", "n", "Respostas Válidas", "Mínimo", "Máximo", "Média", "Mediana", "Desvio Padrão"),
+    digits = 2
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover")
+  ) %>%
+  add_header_above(c(" ", "Estatísticas Descritivas" = 7))
+```
+
+Column {.tabset}
+-----------------------------------------------------------------------
+### Meio de Transporte
+```{r}
+# Preparar os dados: agrupar por 'meio', contar, ordenar e definir os níveis do fator
+dados_meio <- dados_val$respostas %>%
+  filter(!is.na(meio)) %>%
+  group_by(meio) %>%
+  summarise(n = n()) %>%
+  arrange(n) %>%
+  ungroup() %>%
+  mutate(meio = factor(meio, levels = meio))
+
+# Plotar o gráfico de barras com os dados preparados
+grafico_meio <- 
+  ggplot(dados_meio, aes(x = meio, y = n)) +
+  geom_bar(stat = "identity", fill = "lightgreen") +
+  coord_flip() +
+  labs(title = "Distribuição de Meio de Transporte Utilizado",
+       y = "Frequência",
+       x = "") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplotly(grafico_meio)
+```
+
+### Aluvial 1
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggalluvial)
+library(plotly)
+
+# FAZER DO km_rod, município, estado e perm
+```
+
+### Aluvial 2 - Meio, Hosp e motivo
+```{r}
+# Carregar as bibliotecas necessárias
+library(dplyr)
+library(ggplot2)
+library(ggalluvial)
+library(forcats)
+
+# Preparar os dados: filtrar observações completas para meio, hospedagem e motivo_boto,
+# definir a ordem dos fatores (alfabética) e agrupar por meio, hospedagem e motivo_boto
+dados_alluvial <-
+  dados_val$respostas %>%
+  filter(!is.na(meio) & !is.na(hospedagem) & !is.na(motivo_boto)) %>%
+  mutate(
+    meio = factor(
+      meio,
+      ordered = TRUE,
+      levels = c("A pé", "Barco", "Carona", "Van", "Moto", "Ônibus de excursão", "Ônibus intermunicipal", "Carro", "Não respondeu")),
+    hospedagem = factor(hospedagem, levels = sort(unique(hospedagem)))
+  ) %>%
+  group_by(meio, hospedagem, motivo_boto) %>%
+  count()
+
+
+# Construir o diagrama alluvial com dois eixos:
+# eixo1: meio (Meio de Transporte) e eixo2: hospedagem (Tipo de Hospedagem)
+grafico_alluvial <-
+  dados_alluvial %>%
+  ggplot(aes(
+    y = n,
+    axis1 = meio,
+    axis2 = hospedagem,
+    axis3 = motivo_boto)
+  ) +
+  geom_alluvium(aes(fill = motivo_boto)) +
+  geom_stratum(width = 1/4) +
+  scale_x_discrete(
+    limits = c("meio", "hospedagem", "motivo_boto"),
+    labels = c("Meio de Transporte", "Tipo de Hospedagem", "Motivo da Viagem"),
+    expand = c(0.05, 0.05)
+  ) +
+  scale_fill_manual(
+    name = "Motivo da Viagem",
+    values = c("TRUE" = "lightblue", "FALSE" = "pink")
+  ) +
+  geom_text(
+    stat = "stratum",
+    aes(label = after_stat(stratum)),
+    size = 2,
+    color = "black",
+    check_overlap = TRUE) +
+  labs(
+    title = "Fluxo: Meio de Transporte, Tipo de Hospedagem e Motivo da Viagem",
+    y = "Frequência",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Exibir o gráfico estático
+grafico_alluvial
+```
+
+
+### Pensar em outros
+
+- Passeio de boto-cinza
+- Passeio de barco
+- Relação de valores
+- Média de custo calculado
+
+
+Custos resumidos
+=====================================
+Column
+-----------------------------------------------------------------------
 ### Estatísticas Atuais
 - De um total de `r ec$resumo$n_ent` pessoas que responderam ao questionário:
   - **Moradores** = `r ec$resumo$n_m` (`r as.integer(ec$resumo$n_m/ec$resumo$n_ent*100)`% do total; `r as.integer((ec$resumo$n_m/(ec$resumo$n_m + ec$resumo$n_t))*100)`% dos válidos)
@@ -236,28 +315,30 @@ p_wilcox <-
     ec$dados$dados_tcm_sna$custo_c_boto,
     ec$dados$dados_tsm_sna$custo_c_boto,
     exact = FALSE)$p.value 
+
+format_p_value_html <- function(p, digits = 2) {
+  # Formata o valor p em notação científica (ex.: "1.05e-52")
+  p_str <- format(p, scientific = TRUE, digits = digits)
+  # Separa a parte base e o expoente
+  parts <- strsplit(p_str, "e")[[1]]
+  # Garante que o expoente tenha o sinal (caso não venha, adiciona)
+  expoente <- parts[2]
+  # Retorna a string formatada em HTML
+  paste0(parts[1], " × 10<sup>", expoente, "</sup>")
+}
+
 ```
+
 Com base nos testes realizados, analisamos os seguintes resultados:
 
 - **Teste t de Student:**
-  O valor de p obtido foi $p=$ `r p_teste_t`, que é extremamente pequeno. Isso indica uma forte evidência contra a hipótese nula de que as médias das duas amostras são iguais. Portanto, rejeitamos a hipótese nula e concluímos que há uma diferença significativa entre as médias das duas populações.
+O valor de p obtido foi $p=$ `r format_p_value_html(p_teste_t)`, que é extremamente pequeno. Isso indica uma forte evidência contra a hipótese nula de que as médias das duas amostras são iguais. Portanto, rejeitamos a hipótese nula e concluímos que há uma diferença significativa entre as médias das duas populações.
 - **Shapiro-Wilk de normalidade:**
-  - Para turistas com motivo foi $p_{cm}=$ `r p_shap_cm`, o que é muito inferior ao nível de significância de 0.05. Isso nos leva a rejeitar a hipótese nula de normalidade, indicando que os dados não seguem uma distribuição normal.
-  - Para turistas sem motivo foi $p_{sm}=$ `r p_shap_sm`, também muito menor que 0.05. Assim, rejeitamos a hipótese nula de normalidade para essa amostra também, sugerindo estes dados também não seguem uma distribuição normal.
-- **Mann-Whitney** (Wilcoxon para duas amostras independentes): O valor de p obtido foi $p=$ `r p_wilcox`, extremamente pequeno. Isso indica uma forte evidência contra a hipótese nula de que as distribuições das duas amostras são idênticas. Assim, rejeitamos a hipótese nula e concluímos que há uma diferença significativa entre as distribuições das duas amostras.
+- Para turistas com motivo foi $p_{cm}=$ `r format_p_value_html(p_shap_cm)`, o que é muito inferior ao nível de significância de 0.05. Isso nos leva a rejeitar a hipótese nula de normalidade, indicando que os dados não seguem uma distribuição normal.
+- Para turistas sem motivo foi $p_{sm}=$ `r format_p_value_html(p_shap_sm)`, também muito menor que 0.05. Assim, rejeitamos a hipótese nula de normalidade para essa amostra também, sugerindo estes dados também não seguem uma distribuição normal.
+- **Mann-Whitney** (Wilcoxon para duas amostras independentes): O valor de p obtido foi $p=$ `r format_p_value_html(p_wilcox)`, extremamente pequeno. Isso indica uma forte evidência contra a hipótese nula de que as distribuições das duas amostras são idênticas. Assim, rejeitamos a hipótese nula e concluímos que há uma diferença significativa entre as distribuições das duas amostras.
 
 Em resumo, todos os testes realizados indicam a rejeição das hipóteses nulas: há evidências suficientes para afirmar que existem diferenças significativas entre as amostras em termos de suas médias e distribuições. Além disso, as amostras não seguem distribuições normais, como indicado pelos testes de Shapiro-Wilk.
-
-Custos resumidos
-=====================================
-### Dados
-```{r}
-dados_val$respostas %>%
-  select(publico_motivo, custo_transporte, custo_hospedagem, custo_alimentacao, custo_passeio, custo_tempo_integral, custo_tempo_parcial) %>%
-  mutate(across(custo_transporte:custo_tempo_parcial, ~ round(.x, 1))) %>%
-  datatable(options = list(pageLength = 20))
-
-```
 
 Gráficos
 ===================================== 
@@ -270,44 +351,150 @@ Column {.tabset}
 graf_mt_pizza$grafico
 ```
 
-### Hospedagem sem custo 0
-```{r}
-
-```
-
-### Permanência
-```{r}
-
-```
-
-### Previsão
-```{r}
-```
-
-### Passeio de boto-cinza
-```{r}
-```
-
-### Passeio de barco
-```{r}
-```
-
-### Relação de valores
-```{r}
-```
-
-### Média de custo calculado
-```{r}
-```
 
 ### Curva de demanda - com motivo
 ```{r}
+# Acessar os dados necessários a partir do objeto ec
+dados_linha_cm <- ec$dados$dados_tcm_sna
+media_custo_cm <- ec$resumo$media_custo_c_boto_tcm
+triangulo_cm <- data.frame(
+  Obs = c(1, 1, ceiling(nrow(dados_linha_cm)/2)),
+  custo_c_boto = c(media_custo_cm, max(dados_linha_cm$pred), media_custo_cm)
+)
+
+# Criar o gráfico sem os annotate
+g_cm <- ggplot() +
+  geom_polygon(data = triangulo_cm, aes(x = Obs, y = custo_c_boto), 
+               fill = "lightblue", alpha = 0.4) +
+  geom_point(data = dados_linha_cm, aes(x = Obs, y = custo_c_boto), 
+             color = "blue") +
+  geom_line(data = dados_linha_cm, aes(x = Obs, y = pred)) +
+  geom_hline(yintercept = media_custo_cm, linetype = "dashed", color = "red") +
+  labs(
+    title = "Curva de demanda do turismo de observação de boto-cinza em Cananéia - SP",
+    subtitle = "Turistas que realizaram passeios com a intenção de avistar botos-cinza",
+    y = "Custo (R$)",
+    x = "Entrevista num") +
+  theme_classic() +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 8),
+        axis.title = element_text(size = 9))
+
+ path_output <- "03_results"
+  
+  # Verifica se a pasta existe e cria se necessário
+  if (!dir.exists(path_output)) {
+    dir.create(path_output)
+  }
+  
+  ggsave(
+    path = path_output,
+    filename = "EC_cm.pdf",
+    plot = g_cm)
+
+g_cm
 ```
 
 ### Curva de demanda - sem motivo
 ```{r}
+# Acessar os dados necessários a partir do objeto ec
+dados_linha_sm <- ec$dados$dados_tsm_sna
+media_custo_sm <- ec$resumo$media_custo_c_boto_tsm
+triangulo_sm <- data.frame(
+  Obs = c(1, 1, ceiling(nrow(dados_linha_sm)/2)),
+  custo_c_boto = c(media_custo_sm, max(dados_linha_sm$pred), media_custo_sm)
+)
+
+# Criar o gráfico sem os annotate
+g_sm <- ggplot() +
+  geom_polygon(data = triangulo_sm, aes(x = Obs, y = custo_c_boto), 
+               fill = "lightblue", alpha = 0.4) +
+  geom_point(data = dados_linha_sm, aes(x = Obs, y = custo_c_boto), 
+             color = "blue") +
+  geom_line(data = dados_linha_sm, aes(x = Obs, y = pred)) +
+  geom_hline(yintercept = media_custo_sm, linetype = "dashed", color = "red") +
+  labs(
+    title = "Curva de demanda do turismo de observação de boto-cinza em Cananéia - SP",
+    subtitle = "Turistas que realizaram passeios sem a intenção de avistar botos-cinza",
+    y = "Custo (R$)",
+    x = "Entrevista num") +
+  theme_classic() +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 8),
+        axis.title = element_text(size = 9))
+
+ path_output <- "03_results"
+  
+  # Verifica se a pasta existe e cria se necessário
+  if (!dir.exists(path_output)) {
+    dir.create(path_output)
+  }
+  
+  ggsave(
+    path = path_output,
+    filename = "EC_sm.pdf",
+    plot = g_sm)
+
+g_sm
+```
+
+### Patchwork 
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+# Painel de texto para o gráfico "Turista com motivo"
+texto_cm <- ggplot() +
+  annotate("text", x = 0.5, y = 0.5, 
+           label = paste0("Área = ", round(ec$resumo$area_cm, 2), " R$*pessoa\n",
+                          "EC por turista com motivo = R$ ", round(ec$resumo$area_p_n_tcm, 2), " / turista"), 
+           size = 3, hjust = 0.5, vjust = 0.5) +
+  theme_void()
+
+# Painel de texto para o gráfico "Turista sem motivo"
+texto_sm <- ggplot() +
+  annotate("text", x = 0.5, y = 0.5, 
+           label = paste0("Área = ", round(ec$resumo$area_sm, 2), " R$*pessoa\n",
+                          "EC por turista sem motivo = R$ ", round(ec$resumo$area_p_n_tsm, 2), " / turista"), 
+           size = 3, hjust = 0.5, vjust = 0.5) +
+  theme_void()
+
+# Cálculo do EC_total:
+# EC_total = (EC[cM] * P[cM] * n[total]) + (EC[sM] * P[sM] * n[total])
+EC_total_value <- (ec$resumo$area_p_n_tcm * ec$resumo$P_cm * ec$resumo$vis_tot) +
+                  (ec$resumo$area_p_n_tsm * ec$resumo$P_sm * ec$resumo$vis_tot)
+
+# Painel para exibir a fórmula e o valor do EC_total
+p_formula <- ggplot() +
+  annotate("text", x = 0.5, y = 0.5, parse = TRUE,
+           label = paste0(
+             "atop(",
+             "EC[total] == (EC[cM]*P[cM]*n[total]) + (EC[sM]*P[sM]*n[total]),",
+             "atop(",
+             "\"(", round(ec$resumo$area_p_n_tcm, 2), " * ", round(ec$resumo$P_cm, 2), " * ", round(ec$resumo$vis_tot, 2), 
+             ") + (", round(ec$resumo$area_p_n_tsm, 2), " * ", round(ec$resumo$P_sm, 2), " * ", round(ec$resumo$vis_tot, 2), ")\",",
+             "EC[total] == \"R$ ", format(round(EC_total_value, 2), nsmall = 2), "\"",
+             ")",
+             ")"
+           ), 
+           size = 5, hjust = 0.5
+  ) +
+  theme_void()
+
+
+final_plot <- (g_cm | g_sm) / (texto_cm | texto_sm) / p_formula +
+  plot_annotation(title = "Curvas de Demanda dos Turistas",
+                  theme = theme(plot.title = element_text(hjust = 0.5)))
+
+# Exibir o patchwork final (única saída)
+final_plot
+
 
 ```
+
 
 Outros estudos
 ===================================== 
