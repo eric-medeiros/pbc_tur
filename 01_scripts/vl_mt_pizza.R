@@ -26,10 +26,17 @@ vl_mt_pizza <- function(dados_val) {
     annotate("text", x = 0, y = 1, label = paste0("Total de ", sum(dados$n), "\n entrevistados"), color = "darkgray")
   
   
+  path_output <- "03_results"
+  
+  # Verifica se a pasta existe e cria se necessário
+  if (!dir.exists(path_output)) {
+    dir.create(path_output)
+  }
+  
   ggsave(
-      path = "03_results",
-      filename = "pizza.pdf",
-      plot = grafico)
+    path = path_output,
+    filename = "pizza.pdf",
+    plot = grafico)
   
   result <- list(
     grafico = grafico,
