@@ -17,11 +17,15 @@ vl_mt_pizza <- function(dados_val) {
     dados %>%
     ggplot(aes(x = 1, fill = publico_motivo, y = prop)) +
     geom_col(width = 1, color = "white") +
-    scale_fill_manual(values = c("lightblue","lightgrey","blue4","blue")) +
-    geom_text(aes(y = ypos, x = 1, label = label), color = "darkgray", size = 4) +
-    theme_void() + 
-    ggtitle("Moradores e Turistas entrevistados em Cananéia - SP") +
-    theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) +
+    scale_fill_manual(values = c("lightgreen","lightgrey","lightblue","pink")) +
+    geom_text(aes(y = ypos, x = 1, label = label), color = "black", size = 3) +
+    theme_void() +
+    labs(
+      title = "Moradores e Turistas entrevistados em Cananéia - SP",
+      caption = "Dados: IPeC 2024") +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 12),
+          plot.caption = element_text(size = 7)) +
     coord_polar("y", start = 0) +
     annotate("text", x = 0, y = 1, label = paste0("Total de ", sum(dados$n), "\n entrevistados"), color = "darkgray")
   
@@ -35,7 +39,8 @@ vl_mt_pizza <- function(dados_val) {
   
   ggsave(
     path = path_output,
-    filename = "pizza.pdf",
+    filename = "pizza.png",
+    dpi = "retina",
     plot = grafico)
   
   result <- list(
