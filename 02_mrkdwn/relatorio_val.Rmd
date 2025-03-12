@@ -14,10 +14,13 @@ source("01_scripts/vl_mt_pizza.R")
 
 library(DT)
 library(dplyr)
-library(tidyr)
+library(forcats)
+library(ggplot2)
+library(ggalluvial)
 library(knitr)
 library(kableExtra)
 library(plotly)
+library(tidyr)
 
 # Definindo caminhos
 pasta_proj <- file.path(rprojroot::find_rstudio_root_file())
@@ -185,77 +188,8 @@ ggplotly(grafico_meio)
 
 ### Aluvial 1
 ```{r}
-library(dplyr)
-library(ggplot2)
-library(ggalluvial)
-library(plotly)
-
 # FAZER DO km_rod, município, estado e perm
 ```
-
-### Aluvial 2 - Meio, Hosp e motivo
-```{r}
-# Carregar as bibliotecas necessárias
-library(dplyr)
-library(ggplot2)
-library(ggalluvial)
-library(forcats)
-
-# Preparar os dados: filtrar observações completas para meio, hospedagem e motivo_boto,
-# definir a ordem dos fatores (alfabética) e agrupar por meio, hospedagem e motivo_boto
-dados_alluvial <-
-  dados_val$respostas %>%
-  filter(!is.na(meio) & !is.na(hospedagem) & !is.na(motivo_boto)) %>%
-  mutate(
-    meio = factor(
-      meio,
-      ordered = TRUE,
-      levels = c("A pé", "Barco", "Carona", "Van", "Moto", "Ônibus de excursão", "Ônibus intermunicipal", "Carro", "Não respondeu")),
-    hospedagem = factor(hospedagem, levels = sort(unique(hospedagem)))
-  ) %>%
-  group_by(meio, hospedagem, motivo_boto) %>%
-  count()
-
-
-# Construir o diagrama alluvial com dois eixos:
-# eixo1: meio (Meio de Transporte) e eixo2: hospedagem (Tipo de Hospedagem)
-grafico_alluvial <-
-  dados_alluvial %>%
-  ggplot(aes(
-    y = n,
-    axis1 = meio,
-    axis2 = hospedagem,
-    axis3 = motivo_boto)
-  ) +
-  geom_alluvium(aes(fill = motivo_boto)) +
-  geom_stratum(width = 1/4) +
-  scale_x_discrete(
-    limits = c("meio", "hospedagem", "motivo_boto"),
-    labels = c("Meio de Transporte", "Tipo de Hospedagem", "Motivo da Viagem"),
-    expand = c(0.05, 0.05)
-  ) +
-  scale_fill_manual(
-    name = "Motivo da Viagem",
-    values = c("TRUE" = "lightblue", "FALSE" = "pink")
-  ) +
-  geom_text(
-    stat = "stratum",
-    aes(label = after_stat(stratum)),
-    size = 2,
-    color = "black",
-    check_overlap = TRUE) +
-  labs(
-    title = "Fluxo: Meio de Transporte, Tipo de Hospedagem e Motivo da Viagem",
-    y = "Frequência",
-    x = ""
-  ) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
-
-# Exibir o gráfico estático
-grafico_alluvial
-```
-
 
 ### Pensar em outros
 
@@ -290,12 +224,13 @@ Column
   - $A_{cM}/n_{vis}=$  `r ec$resumo$area_cm %>% round(2) %>% as.character()` / `r ec$resumo$n_tcm_sna`  = `r ec$resumo$area_p_n_tcm %>% round(2) %>% as.character()` R$*pessoa/pessoa
   - $A_{sM}/n_{vis}=$  `r ec$resumo$area_sm %>% round(2) %>% as.character()` / `r ec$resumo$n_tsm_sna`  = `r ec$resumo$area_p_n_tsm %>% round(2) %>% as.character()` R$*pessoa/pessoa
   - $n_{total}=$ `r ec$resumo$vis_tot %>% as.character()` visitantes/ano
-  - $á=w=P_{cM}=$ `r ec$resumo$P_cm %>% round(2)`
-  - $â=g=P_{sM}=$ `r ec$resumo$P_sm %>% round(2)`
+  - $á=w=P_{cM}=$ `r ec$resumo$P_cm*100 %>% round(2)` %
+  - $â=g=P_{sM}=$ `r ec$resumo$P_sm*100 %>% round(2)` %
   - $EC_{total}=[(EC_{cM} * P_{cM} * n_{total}) + (EC_{sM} * P_{sM} * n_{total})]$
-  - $EC_{total}=$ [(`r ec$resumo$area_p_n_tcm %>% round(2) %>% as.character()` * `r ec$resumo$P_cm %>% round(2) %>% as.character()` * `r ec$resumo$vis_tot %>% round(2) %>% as.character()`) + (`r ec$resumo$area_p_n_tsm %>% round(2) %>% as.character()` * `r ec$resumo$P_sm %>% round(2) %>% as.character()` * `r ec$resumo$vis_tot %>% round(2) %>% as.character()`)]
+  - $EC_{total}=$ [(`r ec$resumo$area_p_n_tcm %>% round(2) %>% as.character()` * `r ec$resumo$P_cm %>% as.character()` * `r ec$resumo$vis_tot %>% as.character()`) + (`r ec$resumo$area_p_n_tsm %>% round(2) %>% as.character()` * `r ec$resumo$P_sm %>% as.character()` * `r ec$resumo$vis_tot %>% as.character()`)]
   - $EC_{total}=R\$$  [(`r ec$resumo$EC_tcm %>% round(2) %>% as.character()` + `r ec$resumo$EC_tsm %>% round(2) %>% as.character()`)]
   - $EC_{total}=R\$$  `r ec$resumo$EC_total %>% round(2) %>% as.character()`
+- **Considerando:**
 
 Column
 -----------------------------------------------------------------------
@@ -367,18 +302,20 @@ g_cm <- ggplot() +
   geom_polygon(data = triangulo_cm, aes(x = Obs, y = custo_c_boto), 
                fill = "lightblue", alpha = 0.4) +
   geom_point(data = dados_linha_cm, aes(x = Obs, y = custo_c_boto), 
-             color = "blue") +
+             color = "blue", size = 1) +
   geom_line(data = dados_linha_cm, aes(x = Obs, y = pred)) +
   geom_hline(yintercept = media_custo_cm, linetype = "dashed", color = "red") +
   labs(
     title = "Curva de demanda do turismo de observação de boto-cinza em Cananéia - SP",
-    subtitle = "Turistas que realizaram passeios com a intenção de avistar botos-cinza",
+    subtitle = "Dos 192 turistas entrevistados que visitaram Cananéia com a intenção de avistar boto-cinza, e realizaram o passeio,\nexibidos abaixo os 115 que informaram sobre os custos e motivo da viagem",
+    caption = "Dados: IPeC 2024",
     y = "Custo (R$)",
     x = "Entrevista num") +
   theme_classic() +
   theme(legend.position = "none",
-        plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
-        plot.subtitle = element_text(hjust = 0.5, size = 8),
+        plot.title = element_text(hjust = 0.5, size = 12),
+        plot.subtitle = element_text(hjust = 0.5, size = 7),
+        plot.caption = element_text(size = 7),
         axis.title = element_text(size = 9))
 
  path_output <- "03_results"
@@ -390,7 +327,8 @@ g_cm <- ggplot() +
   
   ggsave(
     path = path_output,
-    filename = "EC_cm.pdf",
+    filename = "EC_cm.png",
+    dpi = "retina",
     plot = g_cm)
 
 g_cm
@@ -409,91 +347,189 @@ triangulo_sm <- data.frame(
 # Criar o gráfico sem os annotate
 g_sm <- ggplot() +
   geom_polygon(data = triangulo_sm, aes(x = Obs, y = custo_c_boto), 
-               fill = "lightblue", alpha = 0.4) +
+               fill = "pink", alpha = 0.4) +
   geom_point(data = dados_linha_sm, aes(x = Obs, y = custo_c_boto), 
-             color = "blue") +
+             color = "blue", size = 1) +
   geom_line(data = dados_linha_sm, aes(x = Obs, y = pred)) +
   geom_hline(yintercept = media_custo_sm, linetype = "dashed", color = "red") +
   labs(
     title = "Curva de demanda do turismo de observação de boto-cinza em Cananéia - SP",
-    subtitle = "Turistas que realizaram passeios sem a intenção de avistar botos-cinza",
+    subtitle = "Dos 414 turistas entrevistados que visitaram Cananéia sem a intenção de avistar boto-cinza, mas realizaram o passeio,\n
+    exibidos abaixo os 239 que informaram sobre os custos e motivo da viagem",
+    caption = "Dados: IPeC 2024",
     y = "Custo (R$)",
     x = "Entrevista num") +
   theme_classic() +
   theme(legend.position = "none",
-        plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
-        plot.subtitle = element_text(hjust = 0.5, size = 8),
-        axis.title = element_text(size = 9))
+        plot.caption = element_text(size = 7),
+        plot.title = element_text(hjust = 0.5, size = 12),
+        plot.subtitle = element_text(hjust = 0.5, size = 7),
+        axis.title = element_text(size = 9),
+        )
 
- path_output <- "03_results"
-  
-  # Verifica se a pasta existe e cria se necessário
-  if (!dir.exists(path_output)) {
-    dir.create(path_output)
-  }
-  
-  ggsave(
-    path = path_output,
-    filename = "EC_sm.pdf",
-    plot = g_sm)
+path_output <- "03_results"
+
+ggsave(
+  path = path_output,
+  filename = "EC_sm.png",
+  dpi = "retina",
+  plot = g_sm)
 
 g_sm
 ```
 
-### Patchwork 
-
+### Aluvial 1 - Meio, Hosp e motivo
 ```{r}
-library(ggplot2)
-library(patchwork)
+# Preparar os dados: filtrar observações completas, definir os fatores e calcular as contagens
+dados_alluvial <-
+  dados_val$respostas %>%
+  filter(!is.na(meio) & !is.na(hospedagem) & !is.na(motivo_boto) & meio != "N\303\243o respondeu" & hospedagem != "N\303\243o fiquei hospedado") %>%
+  group_by(meio, hospedagem, motivo_boto) %>%
+  count() %>%
+  ungroup() %>%  # Desagrupar para evitar problemas no fct_reorder()
+  mutate(
+    meio = fct_reorder(meio, n, .fun = sum, .desc = TRUE),
+    hospedagem = fct_reorder(hospedagem, n, .fun = sum, .desc = TRUE)
+  )
 
-# Painel de texto para o gráfico "Turista com motivo"
-texto_cm <- ggplot() +
-  annotate("text", x = 0.5, y = 0.5, 
-           label = paste0("Área = ", round(ec$resumo$area_cm, 2), " R$*pessoa\n",
-                          "EC por turista com motivo = R$ ", round(ec$resumo$area_p_n_tcm, 2), " / turista"), 
-           size = 3, hjust = 0.5, vjust = 0.5) +
-  theme_void()
+data_meio <-
+  dados_alluvial %>% 
+  group_by(meio) %>% 
+  summarise(total = sum(n)) %>%
+  arrange(total) %>%
+  mutate(
+    ypos_stratum = cumsum(total) - total/2,
+    ypos_equidistant = seq(from = min(total), to = sum(total), length.out = n()),
+    meio_label = case_match(
+      meio,
+      "Ônibus intermunicipal" ~ "Ônibus\nintermunicipal",
+      "Ônibus de excursão" ~ "Ônibus de\nexcursão",
+      .default = meio
+    )
+  )
 
-# Painel de texto para o gráfico "Turista sem motivo"
-texto_sm <- ggplot() +
-  annotate("text", x = 0.5, y = 0.5, 
-           label = paste0("Área = ", round(ec$resumo$area_sm, 2), " R$*pessoa\n",
-                          "EC por turista sem motivo = R$ ", round(ec$resumo$area_p_n_tsm, 2), " / turista"), 
-           size = 3, hjust = 0.5, vjust = 0.5) +
-  theme_void()
+data_hospedagem <-
+  dados_alluvial %>% 
+  group_by(hospedagem) %>% 
+  summarise(total = sum(n)) %>%
+  arrange(total) %>%
+  mutate(
+    ypos_stratum = cumsum(total) - total/2,
+    ypos_equidistant = seq(from = min(total), to = sum(total), length.out = n()),
+    hospedagem_label = case_match(
+      as.character(hospedagem),
+      "Casa alugada ou airbnb" ~ "Casa alugada\nou airbnb",
+      "Casa de amigos ou familiares" ~ "Casa de amigos\nou familiares",
+      "Não fiquei hospedado" ~ "Não fiquei\nhospedado",
+      .default = hospedagem)
+  )
 
-# Cálculo do EC_total:
-# EC_total = (EC[cM] * P[cM] * n[total]) + (EC[sM] * P[sM] * n[total])
-EC_total_value <- (ec$resumo$area_p_n_tcm * ec$resumo$P_cm * ec$resumo$vis_tot) +
-                  (ec$resumo$area_p_n_tsm * ec$resumo$P_sm * ec$resumo$vis_tot)
+data_motivo <- dados_alluvial %>% 
+  group_by(motivo_boto) %>% 
+  summarise(total = sum(n)) %>%
+  arrange(total) %>%
+  mutate(
+    motivo_label = case_match(
+      motivo_boto,
+      TRUE ~ "Visitou Cananéia com a intenção\nde avistar boto-cinza,\ne realizou o passeio",
+      FALSE ~ "Visitou Cananéia sem a intenção\nde avistar boto-cinza,\nmas realizou o passeio"),
+    ypos_stratum = cumsum(total) - total/2
+  )
 
-# Painel para exibir a fórmula e o valor do EC_total
-p_formula <- ggplot() +
-  annotate("text", x = 0.5, y = 0.5, parse = TRUE,
-           label = paste0(
-             "atop(",
-             "EC[total] == (EC[cM]*P[cM]*n[total]) + (EC[sM]*P[sM]*n[total]),",
-             "atop(",
-             "\"(", round(ec$resumo$area_p_n_tcm, 2), " * ", round(ec$resumo$P_cm, 2), " * ", round(ec$resumo$vis_tot, 2), 
-             ") + (", round(ec$resumo$area_p_n_tsm, 2), " * ", round(ec$resumo$P_sm, 2), " * ", round(ec$resumo$vis_tot, 2), ")\",",
-             "EC[total] == \"R$ ", format(round(EC_total_value, 2), nsmall = 2), "\"",
-             ")",
-             ")"
-           ), 
-           size = 5, hjust = 0.5
+grafico_alluvial <- 
+  ggplot(dados_alluvial, aes(
+    y = n,
+    axis1 = meio,
+    axis2 = motivo_boto,
+    axis3 = hospedagem)
   ) +
-  theme_void()
+  geom_alluvium(aes(fill = motivo_boto), curve_type = "sigmoid") +
+  geom_stratum(width = 1/3, alpha = 0.4, color = "darkgrey", linewidth = 0.2) +
+  scale_y_continuous(breaks = c(0,250,500), limits = c(0,500)) +
+  scale_x_discrete(
+    limits = c("meio", "motivo_boto", "hospedagem"),
+    labels = c("Meio de Transporte", "Motivo da Viagem", "Tipo de Hospedagem"),
+    expand = c(0.3,0.05)
+  ) +
+  scale_fill_manual(
+    name = "Motivo da Viagem",
+    values = c("TRUE" = "lightblue", "FALSE" = "pink")
+  ) +
+  # Labels externos de "meio" (lado esquerdo)
+  geom_text(
+    data = data_meio,
+    mapping = aes(x = 0.7, y = ypos_equidistant, label = meio_label),
+    hjust = 1,
+    size = 1.8,
+    inherit.aes = FALSE
+  ) +
+  geom_segment(
+    data = data_meio,
+    mapping = aes(x = 0.72, xend = 1, y = ypos_equidistant, yend = ypos_stratum),
+    color = "darkgrey",
+    linewidth = 0.1,
+    inherit.aes = FALSE
+  ) +
+  # Labels externos de "hospedagem" (lado direito)
+  geom_text(
+    data = data_hospedagem,
+    mapping = aes(x = 3.3, y = ypos_equidistant, label = hospedagem_label),
+    hjust = 0,
+    size = 1.8,
+    inherit.aes = FALSE
+  ) +
+  geom_segment(
+    data = data_hospedagem,
+    mapping = aes(x = 3, xend = 3.28, y = ypos_stratum, yend = ypos_equidistant),
+    color = "darkgrey",
+    linewidth = 0.1,
+    inherit.aes = FALSE
+  ) +
+  # Labels do motivo (meio superior central)
+  geom_label(
+    data = data_motivo,
+    aes(x = 2, y = ypos_stratum, label = motivo_label, fill = motivo_boto),
+    size = 2.5,
+    alpha = 0.7,
+    color = "black",
+    label.size = 0.5,
+    lineheight = 1,
+    inherit.aes = FALSE
+  ) +
+  annotate(geom = "text", x = 2, y = 500, label = "Dos 1096 entrevistados, exibidos abaixo 467 turistas que informaram sobre\no motivo da viagem, meio de transporte e tipo de hospedagem", size = 2) +
+  labs(
+    title = "Características do Turista de Cananéia - SP",
+    subtitle = "Meios de Transporte, Tipos de Hospedagem e Motivos da Viagem",
+    caption = "Dados: IPeC 2024",
+    y = "Número de Turistas",
+    x = ""
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.title = element_text(hjust = 0.5, size = 12),
+    plot.subtitle = element_text(hjust = 0.5, size = 7),
+    legend.position = "none",
+    plot.caption = element_text(size = 7),
+    axis.text.x = element_text(size = 9),
+    axis.title.y = element_text(size = 9),
+    axis.text.y = element_text(size = 5),
 
+  )
 
-final_plot <- (g_cm | g_sm) / (texto_cm | texto_sm) / p_formula +
-  plot_annotation(title = "Curvas de Demanda dos Turistas",
-                  theme = theme(plot.title = element_text(hjust = 0.5)))
+path_output <- "03_results"
 
-# Exibir o patchwork final (única saída)
-final_plot
+ggsave(
+  path = path_output,
+  filename = "meio_hosp_motivo.png",
+  dpi = "retina",
+  plot = grafico_alluvial)
 
-
+grafico_alluvial
 ```
+
 
 
 Outros estudos
