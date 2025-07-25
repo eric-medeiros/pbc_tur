@@ -329,6 +329,8 @@ g_cm <- ggplot() +
     path = path_output,
     filename = "EC_cm.png",
     dpi = "retina",
+    width = 8,
+    height = 6,
     plot = g_cm)
 
 g_cm
@@ -354,8 +356,7 @@ g_sm <- ggplot() +
   geom_hline(yintercept = media_custo_sm, linetype = "dashed", color = "red") +
   labs(
     title = "Curva de demanda do turismo de observação de boto-cinza em Cananéia - SP",
-    subtitle = "Dos 414 turistas entrevistados que visitaram Cananéia sem a intenção de avistar boto-cinza, mas realizaram o passeio,\n
-    exibidos abaixo os 239 que informaram sobre os custos e motivo da viagem",
+    subtitle = "Dos 414 turistas entrevistados que visitaram Cananéia sem a intenção de avistar boto-cinza, mas realizaram o passeio,\nexibidos abaixo os 239 que informaram sobre os custos e motivo da viagem",
     caption = "Dados: IPeC 2024",
     y = "Custo (R$)",
     x = "Entrevista num") +
@@ -373,6 +374,8 @@ ggsave(
   path = path_output,
   filename = "EC_sm.png",
   dpi = "retina",
+  width = 8,
+  height = 6,
   plot = g_sm)
 
 g_sm
