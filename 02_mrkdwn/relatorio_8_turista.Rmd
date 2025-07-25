@@ -1,0 +1,430 @@
+---
+title: "Análise do Questionário de Visitantes"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(here)
+library(readxl)
+library(dplyr)
+library(stringr)
+library(purrr)
+library(forcats)
+library(sf)
+library(ggplot2)
+library(ggrepel)
+library(patchwork)
+library(scales)
+library(leaflet)
+library(htmltools)
+library(RColorBrewer)
+library(viridis)
+
+# Leitura dos dados com caminho robusto
+dados_1 <-
+  read_xlsx(here("00_data", "Dados_estouro", "Answers.xlsx"), sheet = 1) %>%
+  filter(!User %in% c("user_5500999999999",
+                      "user_5511111111111",
+                      "user_5501999999999"))
+
+dados_2 <-
+  read_xlsx(here("00_data", "Dados_estouro", "Answers.xlsx"), sheet = 2) %>%
+  filter(!User %in% c("user_5500999999999",
+                      "user_5511111111111",
+                      "user_5501999999999"))
+pib_muni <-
+  read_xlsx(here("00_data", "pib_mun_ibge_2010-2021.xlsx"),
+                      col_types = c(
+                        "numeric", "numeric", "text", "numeric", "text", "text", "numeric", "text", "text", "numeric",
+                        "text", "numeric", "text", "numeric", "text", "text", "numeric", "text", "text", "numeric",
+                        "text", "text", "numeric", "text", "text", "text", "numeric", "text", "text", "text",
+                        "text", "text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric",
+                        "text", "text", "text"),
+                      skip = 1,
+                      col_names = c(
+                        "ano", "cod_grande_regiao", "nome_grande_regiao", "cod_uf", "sigla_uf",
+                        "nome_uf", "code_muni", "nome_mun", "regiao_metropolitana", "cod_mesorregiao",
+                        "nome_mesorregiao", "cod_microrregiao", "nome_microrregiao", "cod_rgim", "nome_rgim",
+                        "mun_rgim", "cod_rgint", "nome_rgint", "mun_rgint", "cod_concentracao_urbana",
+                        "nome_concentracao_urbana", "tipo_concentracao_urbana", "cod_arranjo_populacional", "nome_arranjo_populacional", "hierarquia_urbana",
+                        "hierarquia_urbana_categoria", "cod_regiao_rural", "nome_regiao_rural", "regiao_rural_nucleo", "amazonia_legal", 
+                        "semiarido", "cidade_regiao_sp", "vab_agropecuaria_1000", "vab_industria_1000", "vab_servicos_exceto_adm_1000",
+                        "vab_adm_educ_saude_pub_1000", "vab_total_1000", "impostos_produtos_1000", "pib_total_1000", "pib_per_capita",
+                        "atividade_mais_vab", "atividade_segundo_vab", "atividade_terceiro_vab")) %>%
+  select(code_muni, nome_mun, ano, pib_per_capita) %>%
+  filter(ano == 2021)
+
+
+sinonimos <- read_xlsx(here("00_data", "Dados_estouro", "sinonimos_cidade_estado.xlsx"))
+mapa_sp <- st_read(here("00_data", "dados_geo", "vetores_municipios_sp.gpkg"))
+mapa_br <- st_read(here("00_data", "dados_geo", "vetores_estados_br.gpkg"))
+mapa_munis_br <- st_read(here("00_data", "dados_geo", "vetores_municipios_br.gpkg"))
+
+# Certifica que CRS é WGS84
+mapa_sp <- st_transform(mapa_sp, 4326)
+mapa_br <- st_transform(mapa_br, 4326)
+mapa_munis_br <- st_transform(mapa_munis_br, 4326)
+```
+
+# Origem dos entrevistados
+
+## {.tabset .tabset-pills}
+
+### Gráfico morador/turista
+```{r}
+# Criar base de moradores vs turistas
+pizza_df <-
+  dados_1 %>%
+  filter(Question %in% c(
+    "Caso seja turista, de onde está vindo?",
+    "Qual sua cidade e estado de origem?")
+  ) %>%
+  left_join(sinonimos, by = "Answer") %>%
+  mutate(tipo = ifelse(Estado == "SP" & Cidade == "Cananéia", "Morador de Cananéia", "Turista")) %>%
+  count(tipo) %>%
+  mutate(prop = n / sum(n),
+         label = paste0(tipo, "\n", scales::percent(prop, accuracy = 0.1), "\n(", n, ")"))
+
+# Gráfico de pizza (ou donut)
+ggplot(pizza_df, aes(x = "", y = prop, fill = tipo)) +
+  geom_col(width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  geom_text(aes(label = label),
+            position = position_stack(vjust = 0.5), size = 3, color = "black") +
+  scale_fill_manual(values = c("gray80", "gray50")) +
+  labs(title = "Proporção de moradores e turistas",
+       fill = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    plot.title = element_text(size = 14, hjust = 0.5),
+    legend.position = "none",
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+```
+
+### Gráfico sem SP
+```{r}
+# 1. Contagem
+df_plot <-
+  dados_1 %>%
+  filter(Question %in% c(
+    "Caso seja turista, de onde está vindo?",
+    "Qual sua cidade e estado de origem?")
+  ) %>%
+  left_join(sinonimos, by = "Answer") %>%
+  filter(!Estado %in% c("SP", "Paraguai", "-")) %>%
+  count(Estado, Cidade)
+
+# 2. Ordenar estados por total
+estado_ordenado <- df_plot %>%
+  group_by(Estado) %>%
+  summarise(total = sum(n)) %>%
+  arrange(desc(total)) %>%
+  pull(Estado)
+
+# 3. Reordenar cidades por quantidade dentro de estado (para a cor mais escura no topo)
+df_plot <- df_plot %>%
+  group_by(Estado) %>%
+  arrange(desc(n)) %>%
+  mutate(
+    Cidade = factor(Cidade, levels = unique(Cidade)),
+    ordem_cidade = row_number()) %>%
+  ungroup() %>%
+  mutate(Estado = factor(Estado, levels = estado_ordenado))
+
+# 4. Paletas definidas
+estado_paletas <- list(
+  PR = "Reds",
+  MG = "Purples",
+  BA = "Blues",
+  GO = "Greens",
+  MS = "Oranges",
+  RO = "YlOrBr",
+  RS = "PuBu"
+)
+
+# 5. Gerar cores por cidade, mais forte para topo
+gerar_cores_estado <- function(df, estado, paleta_nome = "Set3") {
+  cidades <- df %>% filter(Estado == estado) %>% arrange(desc(n)) %>% pull(Cidade)
+  n <- length(unique(cidades))
+  cores <- rev(brewer.pal(max(3, min(9, n)), paleta_nome)) # cor mais forte no topo
+  tibble(
+    Cidade = cidades,
+    cor = rep_len(cores, n),
+    Estado = estado
+  )
+}
+cores <- map_dfr(unique(df_plot$Estado), function(estado) {
+  paleta <- estado_paletas[[estado]]
+  if (is.null(paleta)) paleta <- "Set3"
+  gerar_cores_estado(df_plot, estado, paleta)
+})
+cores_named <- setNames(cores$cor, cores$Cidade)
+
+# 6. Plotar
+  ggplot(df_plot, aes(x = Estado, y = n, fill = Cidade)) +
+  geom_col(width = 0.5, show.legend = FALSE) +
+  geom_text(data = df_plot,
+            aes(label = Cidade),
+            position = position_stack(vjust = 0.5),
+            size = 3, angle = 50, hjust = 0, color = "black") +
+  scale_x_discrete(expand = c(0,1)) +
+  scale_fill_manual(values = cores_named) +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(
+    title = "Visitantes por Estado e Cidade de Origem (SP removido)",
+    x = "Estado", y = "Número de visitantes"
+  )
+
+```
+
+### Gráfico só SP
+```{r}
+
+# 1. Contagem por cidade
+df_sp <- 
+  dados_1 %>%
+  filter(Question %in% c(
+    "Caso seja turista, de onde está vindo?",
+    "Qual sua cidade e estado de origem?")
+  ) %>%
+  left_join(sinonimos, by = "Answer") %>%
+  filter(Estado == "SP" & Cidade != "Cananéia") %>%
+  count(Cidade) %>%
+  arrange(desc(n)) %>%
+  mutate(Cidade = factor(Cidade, levels = Cidade))
+
+# 5. Plotar
+
+ggplot(df_sp, aes(x = Cidade, y = n)) +
+  geom_col(width = 0.5, show.legend = FALSE) +
+  geom_text(data = df_sp,
+            aes(label = Cidade),
+            nudge_y = 0.5,
+            size = 2.5, angle = 60, hjust = 0, color = "black") +
+  scale_x_discrete(expand = expansion(mult = c(0.03, 0.06))) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    
+  ) +
+  labs(
+    title = "Visitantes do Estado de São Paulo por Cidade",
+    y = "Número de visitantes"
+  )
+
+```
+
+### Mapa dos municípios do Brasil
+```{r}
+# Etapa 3: Contagem por cidade em todos os estados
+df_municipios <- dados_1 %>%
+  filter(Question %in% c("Caso seja turista, de onde está vindo?",
+                         "Qual sua cidade e estado de origem?"),
+         !User %in% c("user_5500999999999",
+                      "user_5511111111111",
+                      "user_5501999999999")) %>%
+  left_join(sinonimos, by = "Answer") %>%
+  count(Cidade, Estado) %>%
+  mutate(nome_muni = toupper(Cidade))
+
+# Juntar com os dados
+mapa_munis_br <- mapa_munis_br %>%
+  mutate(nome_muni = toupper(name_muni)) %>%
+  left_join(df_municipios, by = "nome_muni")
+
+# Plotar
+ggplot(mapa_munis_br) +
+  geom_sf(aes(fill = n), color = "gray90", size = 0.005) +
+  geom_sf(data = mapa_br, fill = NA, color = "gray30", size = 0.1) +
+  scale_fill_viridis_c(option = "C", na.value = "gray95") +
+  theme_void(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(2, "cm"),
+    legend.key.height = unit(0.4, "cm"),
+    plot.title = element_text(hjust = 0.5, size = 14)
+  ) +
+  labs(
+    title = "Origem dos Visitantes por Município (Brasil)",
+    fill = "Visitantes"
+  )
+
+```
+
+# Gostou de ver boto?
+
+### ⭐⭐⭐⭐⭐
+```{r}
+user_tipo <- 
+  dados_1 %>%
+  filter(Question %in% c(
+    "Caso seja turista, de onde está vindo?",
+    "Qual sua cidade e estado de origem?")
+  ) %>%
+  left_join(sinonimos, by = "Answer") %>%
+  mutate(tipo = ifelse(Estado == "SP" & Cidade == "Cananéia", "Morador de Cananéia", "Turista")) %>%
+  select(User, tipo)
+
+df_gosto_rel <-
+  dados_1 %>%
+  filter(Question %in% c(
+    "Se você viu algum boto-cinza, quanto você gostou?",
+    "Quanto você vê de importância do boto-cinza para o turismo em Cananéia?")
+  ) %>%
+  filter(!is.na(Answer), !Answer %in% c("Desejo não responder", "Muito importante")) %>%
+  left_join(user_tipo, by = "User", multiple = "first") %>%
+  select(resposta = Answer, tipo) %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%")
+  ) %>%
+  na.omit() %>%
+  ungroup() %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
+
+ggplot(df_gosto_rel, aes(x = resposta, y = perc, fill = tipo)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.9),
+            hjust = -0.1, size = 4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     expand = expansion(mult = c(0, 0.1))) +
+  scale_fill_manual(values = c(
+    "Morador de Cananéia" = "gray80",
+    "Turista" = "gray50"
+  )) +
+  coord_flip() +
+  labs(
+    title = "Percepção sobre o boto-cinza entre moradores e turistas",
+    x = NULL,
+    y = "Frequência relativa",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    legend.position = "bottom"
+  )
+
+
+```
+
+# Passeio Exclusivo
+
+### Passeio Exclusivo
+```{r}
+
+# Respostas à pergunta do passeio
+df_barras <- dados_1 %>%
+  filter(Question == "Se tivesse um passeio exclusivo para ver botos-cinza, você estaria disposto a fazê-lo?") %>%
+  left_join(user_tipo, by = "User", multiple = "first") %>%
+  select(resposta = Answer, tipo) %>%
+  na.omit() %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%")
+  ) %>%
+  ungroup() %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
+
+# Gráfico de barras horizontais
+ggplot(df_barras, aes(x = perc, y = resposta, fill = tipo)) +
+  geom_col(position = "dodge", width = 0.8) +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.8),
+            hjust = -0.1,
+            size = 3.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1.1)) +
+  scale_fill_manual(values = c("Morador de Cananéia" = "gray80",
+                               "Turista" = "gray50")) +
+  labs(x = "Frequência relativa",
+       y = NULL,
+       fill = NULL,
+       title = "Percepção sobre o boto-cinza entre moradores e turistas") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, hjust = 0.5),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+```
+
+# Conduta
+
+### Conduta
+```{r}
+df_conduta <- 
+  dados_1 %>%
+  filter(Question == "Na sua percepção, como foi a conduta das embarcações que você viu (no canal, no píer, praia ou outro local)?") %>%
+  left_join(user_tipo, by = "User", multiple = "first") %>%
+  select(resposta = Answer, tipo) %>%
+  na.omit() %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%"),
+    resposta = recode(resposta,
+      "Vi voadeiras fazendo manobras que ameaçam botos e pessoas" = "Vi voadeiras fazendo manobras\nque ameaçam botos e pessoas",
+      "Vi jetsky fazendo manobras que ameaçam botos e pessoas" = "Vi jetsky fazendo manobras\nque ameaçam botos e pessoas",
+      "Vi escunas fazendo manobras que ameaçam botos e pessoas" = "Vi escunas fazendo manobras\nque ameaçam botos e pessoas",
+      "Não vi condutas inapropriadas" = "Não vi\ncondutas inapropriadas",
+      "Desejo não responder" = "Desejo\nnão responder"
+    )
+  ) %>%
+  ungroup() %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
+
+ggplot(df_conduta, aes(x = perc, y = resposta, fill = tipo)) +
+  geom_col(position = "dodge", width = 0.8) +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.8),
+            hjust = -0.1,
+            size = 3.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1.1)) +
+  scale_fill_manual(values = c("Morador de Cananéia" = "gray80",
+                               "Turista" = "gray50")) +
+  labs(x = "Frequência relativa",
+       y = NULL,
+       fill = NULL,
+       title = "Percepção sobre o boto-cinza entre moradores e turistas") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, hjust = 0),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+```
+
+# dados_2 + mapa
+
+## Fluxo: Hospedagem → Tempo → Motivo
