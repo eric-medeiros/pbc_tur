@@ -9,6 +9,7 @@ output:
 
 ```{r setup, include=FALSE}
 library(flexdashboard)
+library(knitr)
 library(here)
 library(readxl)
 library(dplyr)
@@ -27,16 +28,60 @@ library(viridis)
 
 # Leitura dos dados com caminho robusto
 dados_1 <-
-  read_xlsx(here("00_data", "Dados_estouro", "Answers.xlsx"), sheet = 1) %>%
+read_xlsx(here("00_data", "Dados_estouro", "Answers.xlsx"), sheet = 1) %>%
   filter(!User %in% c("user_5500999999999",
                       "user_5511111111111",
-                      "user_5501999999999"))
-
+                      "user_5501999999999",
+                      "user_5513981060153",
+                      "user_5511957776988",
+                      "user_5513981565651",
+                      "user_5513997270574"
+                      )) %>%
+  filter(Question %in% c(
+    "Qual sua cidade e estado de origem?",
+    "Quanto você vê de importância do boto-cinza para o turismo em Cananéia?",
+    "Se tivesse um passeio exclusivo para ver botos-cinza, você estaria disposto a fazê-lo?",
+    "Na sua percepção, como foi a conduta das embarcações que você viu (no canal, no píer, praia ou outro local)?")) %>%
+  group_by(Question) %>%
+  distinct(User, .keep_all = TRUE) %>%
+  ungroup() %>%
+  mutate(pergunta_num = case_match(
+    Question,
+    "Qual sua cidade e estado de origem?" ~ 1,
+    "Quanto você vê de importância do boto-cinza para o turismo em Cananéia?" ~ 2,
+    "Se tivesse um passeio exclusivo para ver botos-cinza, você estaria disposto a fazê-lo?" ~ 3,
+    "Na sua percepção, como foi a conduta das embarcações que você viu (no canal, no píer, praia ou outro local)?" ~ 4
+    )) %>%
+  select(
+    user = User,
+    pergunta = Question,
+    pergunta_num,
+    resposta = Answer
+  )
+    
 dados_2 <-
-  read_xlsx(here("00_data", "Dados_estouro", "Answers.xlsx"), sheet = 2) %>%
+ read_xlsx(here("00_data", "Dados_estouro", "Answers.xlsx"), sheet = 2) %>%
   filter(!User %in% c("user_5500999999999",
                       "user_5511111111111",
-                      "user_5501999999999"))
+                      "user_5501999999999",
+                      "user_5513981060153",
+                      "user_5511972412699",
+                      "user_5511997876762"
+                      )) %>%
+  distinct(Question, Answer, User, .keep_all = TRUE) %>%
+  mutate(pergunta_num = case_match(
+    Question,
+    "Caso queria dar alguma sugestão ao Projeto escreva abaixo, caso contrario escreva não." ~ 1,
+    "Se você viu alguma recomendação de conduta para embarcações próximas de botos-cinza, onde viu essa informação?" ~ 2,
+    "Você acha que recomendações de conduta foram seguidas no seu passeio?" ~ 3,
+    "Você fez algum passeio de barco? O que você achou do valor do passeio de barco?" ~ 4,
+    "Você recebeu informações sobre a região durante o passeio de barco? Achou de qualidade?" ~ 5)) %>%
+  select(
+    user = User,
+    pergunta = Question,
+    pergunta_num,
+    resposta = Answer)
+
 pib_muni <-
   read_xlsx(here("00_data", "pib_mun_ibge_2010-2021.xlsx"),
                       col_types = c(
@@ -69,57 +114,70 @@ mapa_munis_br <- st_read(here("00_data", "dados_geo", "vetores_municipios_br.gpk
 mapa_sp <- st_transform(mapa_sp, 4326)
 mapa_br <- st_transform(mapa_br, 4326)
 mapa_munis_br <- st_transform(mapa_munis_br, 4326)
+
+# Alterações padrão das tabelas
+user_tipo <- 
+  dados_1 %>%
+  filter(pergunta_num == 1) %>%
+  left_join(sinonimos, by = join_by("resposta" == "Answer")) %>%
+  mutate(tipo = ifelse(Estado == "SP" & Cidade == "Cananéia", "Morador de Cananéia", "Turista")) %>%
+  select(user, tipo)
+
+dados_1 <-
+  dados_1 %>%
+  left_join(user_tipo, by = "user", multiple = "first")
+
+dados_2 <-
+  dados_2 %>%
+  left_join(user_tipo, by = "user", multiple = "first")
 ```
 
-# Origem dos entrevistados
+# 1 - Primeiro questionário (199 Respostas)
 
 ## {.tabset .tabset-pills}
 
-### Gráfico morador/turista
-```{r}
+### Morador/Turista {.column width=500}
+```{r grafico_morador_turista, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
 # Criar base de moradores vs turistas
 pizza_df <-
   dados_1 %>%
-  filter(Question %in% c(
-    "Caso seja turista, de onde está vindo?",
-    "Qual sua cidade e estado de origem?")
-  ) %>%
-  left_join(sinonimos, by = "Answer") %>%
-  mutate(tipo = ifelse(Estado == "SP" & Cidade == "Cananéia", "Morador de Cananéia", "Turista")) %>%
+  filter(pergunta_num == 1) %>%
+  left_join(sinonimos, by = join_by("resposta" == "Answer")) %>%
   count(tipo) %>%
   mutate(prop = n / sum(n),
          label = paste0(tipo, "\n", scales::percent(prop, accuracy = 0.1), "\n(", n, ")"))
 
 # Gráfico de pizza (ou donut)
-ggplot(pizza_df, aes(x = "", y = prop, fill = tipo)) +
+grafico_pizza <- ggplot(pizza_df, aes(x = "", y = prop, fill = tipo)) +
   geom_col(width = 1, color = "white") +
   coord_polar(theta = "y") +
   geom_text(aes(label = label),
-            position = position_stack(vjust = 0.5), size = 3, color = "black") +
+            position = position_stack(vjust = 0.5), size = 3.5, color = "black") +
   scale_fill_manual(values = c("gray80", "gray50")) +
-  labs(title = "Proporção de moradores e turistas",
-       fill = NULL) +
+  labs(title = "Proporção de moradores e turistas") +
   theme_minimal(base_size = 13) +
   theme(
     panel.grid = element_blank(),
     axis.text = element_blank(),
     axis.title = element_blank(),
-    plot.title = element_text(size = 14, hjust = 0.5),
+    plot.title = element_text(size = 14, hjust = 0.5, lineheight = 1.1),
     legend.position = "none",
     plot.background = element_rect(fill = "white", color = NA)
   )
-```
 
-### Gráfico sem SP
-```{r}
+# Salvar para exportar depois se quiser
+ggsave("03_results/grafico_morador_turista.png", grafico_pizza, width = 6, height = 5, dpi = 300)
+
+```
+![](../03_results/grafico_morador_turista.png)
+
+### Origem sem SP {.column width=900}
+```{r grafico_turistas_fora_sp, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
 # 1. Contagem
 df_plot <-
   dados_1 %>%
-  filter(Question %in% c(
-    "Caso seja turista, de onde está vindo?",
-    "Qual sua cidade e estado de origem?")
-  ) %>%
-  left_join(sinonimos, by = "Answer") %>%
+  filter(pergunta_num == 1) %>%
+  left_join(sinonimos, by = join_by("resposta" == "Answer")) %>%
   filter(!Estado %in% c("SP", "Paraguai", "-")) %>%
   count(Estado, Cidade)
 
@@ -170,42 +228,43 @@ cores <- map_dfr(unique(df_plot$Estado), function(estado) {
 cores_named <- setNames(cores$cor, cores$Cidade)
 
 # 6. Plotar
-  ggplot(df_plot, aes(x = Estado, y = n, fill = Cidade)) +
+grafico_origem_sem_sp <- ggplot(df_plot, aes(x = Estado, y = n, fill = Cidade)) +
   geom_col(width = 0.5, show.legend = FALSE) +
   geom_text(data = df_plot,
             aes(label = Cidade),
             position = position_stack(vjust = 0.5),
             size = 3, angle = 50, hjust = 0, color = "black") +
+  scale_y_continuous(n.breaks = 3) +
   scale_x_discrete(expand = c(0,1)) +
   scale_fill_manual(values = cores_named) +
   theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 13, lineheight = 1.1),
+    panel.grid.major.x = element_blank()
+  ) +
   labs(
-    title = "Visitantes por Estado e Cidade de Origem (SP removido)",
-    x = "Estado", y = "Número de visitantes"
+    title = "Visitantes por Unidade Federativa e Cidade de Origem (SP removido)",
+    x = "Unidade Federativa", y = "Número de visitantes"
   )
 
+# Salvar para HTML externo ou outro uso
+ggsave("03_results/grafico_origem_sem_sp.png", grafico_origem_sem_sp, width = 10, height = 6, dpi = 300)
 ```
+![](../03_results/grafico_origem_sem_sp.png)
 
-### Gráfico só SP
-```{r}
-
-# 1. Contagem por cidade
+### Origem só SP {.column width=900}
+```{r grafico_origem_sp, echo=FALSE, fig.align='center', fig.width=10, fig.height=6}
+# Contagem por cidade
 df_sp <- 
   dados_1 %>%
-  filter(Question %in% c(
-    "Caso seja turista, de onde está vindo?",
-    "Qual sua cidade e estado de origem?")
-  ) %>%
-  left_join(sinonimos, by = "Answer") %>%
+  filter(pergunta_num == 1) %>%
+  left_join(sinonimos, by = join_by("resposta" == "Answer")) %>%
   filter(Estado == "SP" & Cidade != "Cananéia") %>%
   count(Cidade) %>%
   arrange(desc(n)) %>%
   mutate(Cidade = factor(Cidade, levels = Cidade))
 
-# 5. Plotar
-
-ggplot(df_sp, aes(x = Cidade, y = n)) +
+grafico_origem_sp <- ggplot(df_sp, aes(x = Cidade, y = n)) +
   geom_col(width = 0.5, show.legend = FALSE) +
   geom_text(data = df_sp,
             aes(label = Cidade),
@@ -219,76 +278,116 @@ ggplot(df_sp, aes(x = Cidade, y = n)) +
     panel.grid.minor.y = element_blank(),
     axis.text.x = element_blank(),
     axis.title.x = element_blank(),
-    plot.title = element_text(hjust = 0.5),
-    
+    plot.title = element_text(hjust = 0.5, size = 13, lineheight = 1.1)
   ) +
   labs(
     title = "Visitantes do Estado de São Paulo por Cidade",
     y = "Número de visitantes"
   )
 
+# Salvar o gráfico
+ggsave("03_results/grafico_origem_sp.png", grafico_origem_sp, width = 10, height = 6, dpi = 300)
 ```
+![](../03_results/grafico_origem_sp.png)
 
-### Mapa dos municípios do Brasil
-```{r}
-# Etapa 3: Contagem por cidade em todos os estados
-df_municipios <- dados_1 %>%
-  filter(Question %in% c("Caso seja turista, de onde está vindo?",
-                         "Qual sua cidade e estado de origem?"),
-         !User %in% c("user_5500999999999",
-                      "user_5511111111111",
-                      "user_5501999999999")) %>%
-  left_join(sinonimos, by = "Answer") %>%
-  count(Cidade, Estado) %>%
-  mutate(nome_muni = toupper(Cidade))
+### Origem cloropleths municípios do Brasil {.column width=1200}
+```{r mapa_origem_municipios_br, echo=FALSE, fig.align='center', fig.width=11, fig.height=8}
+# Dados agregados por cidade
+dados_agg <- dados_1 %>%
+  filter(pergunta_num == 1) %>%
+  left_join(sinonimos, by = join_by("resposta" == "Answer")) %>%
+  count(Cidade, Estado)
 
-# Juntar com os dados
-mapa_munis_br <- mapa_munis_br %>%
-  mutate(nome_muni = toupper(name_muni)) %>%
-  left_join(df_municipios, by = "nome_muni")
+# Juntar com o mapa
+dados_mapa <- mapa_munis_br %>%
+  left_join(dados_agg,
+            by = join_by("name_muni" == "Cidade", "abbrev_state" == "Estado")) %>%
+  mutate(bin = cut(n,
+                   breaks = c(0, 1, 5, 10, 50, Inf),
+                   labels = c("1", "2–5", "6–10", "11–50", "51+"),
+                   include.lowest = TRUE,
+                   right = TRUE))
 
-# Plotar
-ggplot(mapa_munis_br) +
-  geom_sf(aes(fill = n), color = "gray90", size = 0.005) +
+grafico_mapa <- ggplot(dados_mapa) +
+  geom_sf(aes(fill = bin), color = "gray90", size = 0.005) +
   geom_sf(data = mapa_br, fill = NA, color = "gray30", size = 0.1) +
-  scale_fill_viridis_c(option = "C", na.value = "gray95") +
+  scale_fill_viridis_d(option = "C", na.value = "gray95") +
   theme_void(base_size = 12) +
   theme(
-    legend.position = "bottom",
-    legend.key.width = unit(2, "cm"),
-    legend.key.height = unit(0.4, "cm"),
+    legend.position = "none",
     plot.title = element_text(hjust = 0.5, size = 14)
-  ) +
-  labs(
-    title = "Origem dos Visitantes por Município (Brasil)",
-    fill = "Visitantes"
   )
 
+# Extrai os dados válidos
+df_raster <- dados_mapa %>%
+  filter(!is.na(n)) %>%
+  select(n, bin) %>%
+  arrange(-n) %>%
+  as.data.frame()
+
+# Criar grid
+df_grid <- expand.grid(
+  x = 1:2,
+  y = 26:1
+) %>%
+  arrange(y, x) %>%
+  mutate(
+    n = c(df_raster$n, rep(NA, 52 - nrow(df_raster))),
+    bin = c(df_raster$bin, rep(NA, 52 - nrow(df_raster)))
+  )
+
+grafico_blocos <- ggplot(df_grid, aes(x = x, y = y, fill = bin)) +
+  geom_tile(color = "gray90") +
+  scale_fill_viridis_c(option = "C", na.value = "gray95") +
+  coord_fixed() +
+  theme_void(base_size = 12) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, size = 14)
+  )
+
+# Criar legenda manual
+legenda_df <- tibble(
+  label = c("1 visitante", "2–5 visitantes", "6–10 visitantes", "11–50 visitantes", "51+ visitantes"),
+  bin = factor(c("1", "2–5", "6–10", "11–50", "51+"),
+               levels = c("1", "2–5", "6–10", "11–50", "51+")),
+  x = 1,
+  y = 5:1
+)
+
+grafico_legenda <- ggplot(legenda_df, aes(x = x, y = y)) +
+  geom_tile(aes(fill = bin), width = 0.4, height = 0.4) +
+  geom_text(aes(label = label), hjust = 0, nudge_x = 0.3, size = 3.5) +
+  scale_fill_viridis_d(option = "C", na.value = "gray95", drop = FALSE) +
+  xlim(0.8, 2) +
+  coord_fixed() +
+  theme_void() +
+  labs(title = "Municípios com:") +
+  theme(legend.position = "none")
+
+# Patchwork
+grafico_final <-
+  grafico_mapa + grafico_blocos + grafico_legenda +
+  plot_layout(ncol = 3) +
+  plot_annotation(
+    title = "Origem dos Visitantes por Município",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+  )
+
+# Salvar
+ggsave("03_results/grafico_origem_municipios_br.png", grafico_final,
+       width = 11, height = 8, dpi = 300)
 ```
+![](../03_results/grafico_origem_municipios_br.png)
 
-# Gostou de ver boto?
-
-### ⭐⭐⭐⭐⭐
-```{r}
-user_tipo <- 
-  dados_1 %>%
-  filter(Question %in% c(
-    "Caso seja turista, de onde está vindo?",
-    "Qual sua cidade e estado de origem?")
-  ) %>%
-  left_join(sinonimos, by = "Answer") %>%
-  mutate(tipo = ifelse(Estado == "SP" & Cidade == "Cananéia", "Morador de Cananéia", "Turista")) %>%
-  select(User, tipo)
-
+### Gostou de ver boto? ⭐⭐⭐⭐⭐ {.column width=900}
+```{r grafico_gosto_boto, echo=FALSE, fig.align='center', fig.width=8, fig.height=6}
 df_gosto_rel <-
   dados_1 %>%
-  filter(Question %in% c(
-    "Se você viu algum boto-cinza, quanto você gostou?",
-    "Quanto você vê de importância do boto-cinza para o turismo em Cananéia?")
-  ) %>%
-  filter(!is.na(Answer), !Answer %in% c("Desejo não responder", "Muito importante")) %>%
-  left_join(user_tipo, by = "User", multiple = "first") %>%
-  select(resposta = Answer, tipo) %>%
+  filter(pergunta_num == 2) %>%
+  filter(!is.na(resposta), !resposta %in% c("Desejo não responder", "Muito importante")) %>%
   count(tipo, resposta) %>%
   group_by(tipo) %>%
   mutate(
@@ -299,7 +398,8 @@ df_gosto_rel <-
   ungroup() %>%
   tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
 
-ggplot(df_gosto_rel, aes(x = resposta, y = perc, fill = tipo)) +
+# Gráfico
+grafico_gosto_boto <- ggplot(df_gosto_rel, aes(x = resposta, y = perc, fill = tipo)) +
   geom_col(position = "dodge") +
   geom_text(aes(label = label),
             position = position_dodge(width = 0.9),
@@ -319,7 +419,7 @@ ggplot(df_gosto_rel, aes(x = resposta, y = perc, fill = tipo)) +
   ) +
   theme_minimal(base_size = 13) +
   theme(
-    plot.title = element_text(hjust = 0.5),
+    plot.title = element_text(hjust = 0.5, size = 14, lineheight = 1.1),
     axis.text.x = element_text(angle = 0),
     panel.grid.minor = element_blank(),
     panel.grid.major.y = element_blank(),
@@ -327,20 +427,17 @@ ggplot(df_gosto_rel, aes(x = resposta, y = perc, fill = tipo)) +
     legend.position = "bottom"
   )
 
-
+# Salvar o gráfico
+ggsave("03_results/grafico_gosto_boto.png", grafico_gosto_boto, width = 8, height = 6, dpi = 300)
 ```
+![](../03_results/grafico_gosto_boto.png)
 
-# Passeio Exclusivo
 
-### Passeio Exclusivo
-```{r}
-
+### Passeio Exclusivo {.column width=900}
+```{r grafico_passeio_exclusivo, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
 # Respostas à pergunta do passeio
 df_barras <- dados_1 %>%
-  filter(Question == "Se tivesse um passeio exclusivo para ver botos-cinza, você estaria disposto a fazê-lo?") %>%
-  left_join(user_tipo, by = "User", multiple = "first") %>%
-  select(resposta = Answer, tipo) %>%
-  na.omit() %>%
+  filter(pergunta_num == 3) %>%
   count(tipo, resposta) %>%
   group_by(tipo) %>%
   mutate(
@@ -351,7 +448,7 @@ df_barras <- dados_1 %>%
   tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
 
 # Gráfico de barras horizontais
-ggplot(df_barras, aes(x = perc, y = resposta, fill = tipo)) +
+grafico_passeio_exclusivo <- ggplot(df_barras, aes(x = perc, y = resposta, fill = tipo)) +
   geom_col(position = "dodge", width = 0.8) +
   geom_text(aes(label = label),
             position = position_dodge(width = 0.8),
@@ -372,18 +469,17 @@ ggplot(df_barras, aes(x = perc, y = resposta, fill = tipo)) +
     panel.grid.major.y = element_blank(),
     panel.grid.minor.y = element_blank()
   )
+
+# Salvar o gráfico
+ggsave("03_results/grafico_passeio_exclusivo.png", grafico_passeio_exclusivo, width = 8, height = 6, dpi = 300)
 ```
+![](../03_results/grafico_passeio_exclusivo.png)
 
-# Conduta
-
-### Conduta
-```{r}
+### Conduta {.column width=900}
+```{r grafico_conduta, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
 df_conduta <- 
   dados_1 %>%
-  filter(Question == "Na sua percepção, como foi a conduta das embarcações que você viu (no canal, no píer, praia ou outro local)?") %>%
-  left_join(user_tipo, by = "User", multiple = "first") %>%
-  select(resposta = Answer, tipo) %>%
-  na.omit() %>%
+  filter(pergunta_num == 4) %>%
   count(tipo, resposta) %>%
   group_by(tipo) %>%
   mutate(
@@ -400,7 +496,8 @@ df_conduta <-
   ungroup() %>%
   tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
 
-ggplot(df_conduta, aes(x = perc, y = resposta, fill = tipo)) +
+# Gráfico de barras horizontais
+grafico_conduta <- ggplot(df_conduta, aes(x = perc, y = resposta, fill = tipo)) +
   geom_col(position = "dodge", width = 0.8) +
   geom_text(aes(label = label),
             position = position_dodge(width = 0.8),
@@ -423,8 +520,259 @@ ggplot(df_conduta, aes(x = perc, y = resposta, fill = tipo)) +
     panel.grid.minor.x = element_blank()
   )
 
+# Salvar o gráfico
+ggsave("03_results/grafico_conduta.png", grafico_conduta, width = 8, height = 6, dpi = 300)
+```
+![](../03_results/grafico_conduta.png)
+
+# 2 - Mapa
+
+# 3 - Segundo questionário (13 Respostas)
+
+## {.tabset .tabset-pills}
+
+### Sugestão ao Projeto
+```{r}
+df_sugestoes <- dados_2 %>%
+  filter(pergunta_num == 1) %>%
+  mutate(resposta = str_squish(resposta)) %>%
+  arrange(desc(str_to_lower(resposta) %in% c("não", "nao", "não.", "nao.", "sem sugestões", "sem sugestão", "ok"))) %>%
+  select(tipo, resposta)
+
+kable(
+  df_sugestoes,
+  col.names = c("Tipo de respondente", "Resposta escrita"),
+  align = "ll",
+  caption = "Respostas únicas à pergunta aberta sobre sugestões ao Projeto"
+)
 ```
 
-# dados_2 + mapa
+### Viu nossa info de recomendações de conduta? {.column width=900}
+```{r grafico_recomendacao_conduta, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
+df_recomendacao <- 
+  dados_2 %>%
+  filter(pergunta_num == 2) %>%
+  na.omit() %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%"),
+    util = !resposta %in% c("Desejo não responder", "Não fiquei sabendo sobre recomendações de conduta"),
+    resposta = recode(resposta,
+      "Condutor da embarcação me contou" = "Condutor da embarcação\nme contou",
+      "Desejo não responder" = "Desejo\nnão responder",
+      "Já cheguei sabendo" = "Já\ncheguei sabendo",
+      "Não fiquei sabendo sobre recomendações de conduta" = "Não fiquei sabendo\nsobre recomendações",
+      "Ouvi numa palestra" = "Ouvi\nnuma palestra",
+      "Vi em um cartaz" = "Vi em\num cartaz",
+      "Vi no app estouro" = "Vi no app\nEstouro"
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(
+    resposta = fct_reorder(resposta, as.numeric(util) * n)
+  ) %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
 
-## Fluxo: Hospedagem → Tempo → Motivo
+# Gráfico de barras horizontais
+grafico_recomendacao_conduta <- ggplot(df_recomendacao, aes(x = perc, y = resposta, fill = tipo)) +
+  geom_col(position = "dodge", width = 0.8) +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.8),
+            hjust = -0.1,
+            size = 3.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1.1)) +
+  scale_fill_manual(values = c("Morador de Cananéia" = "gray80",
+                               "Turista" = "gray50")) +
+  labs(x = "Frequência relativa",
+       y = NULL,
+       fill = NULL,
+       title = "Fontes de recomendação de conduta para embarcações") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 13, hjust = 3),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+# Salvar o gráfico
+ggsave("03_results/grafico_recomendacao_conduta.png", grafico_recomendacao_conduta, width = 6, height = 5, dpi = 300)
+```
+![](../03_results/grafico_recomendacao_conduta.png)
+
+
+### Embarcações seguiram recomendações de conduta? {.column width=900}
+```{r grafico_seguidas_conduta, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
+df_seguidas <- 
+  dados_2 %>%
+  filter(pergunta_num == 3) %>%
+  na.omit() %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%"),
+    resposta = recode(resposta,
+      "Sim, parcialmente" = "Sim,\nparcialmente",
+      "Sim, integralmente" = "Sim,\nintegralmente",
+      "Não sei avaliar" = "Não sei\navaliar",
+      "Desejo não responder" = "Desejo\nnão responder"
+    ),
+    resposta = factor(resposta, levels = c(
+      "Sim,\nintegralmente",
+      "Sim,\nparcialmente",
+      "Não",
+      "Não sei\navaliar",
+      "Desejo\nnão responder"
+    ))
+  ) %>%
+  ungroup() %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
+
+# Gráfico de barras horizontais
+grafico_seguidas_conduta <- ggplot(df_seguidas, aes(x = perc, y = resposta, fill = tipo)) +
+  geom_col(position = "dodge", width = 0.8) +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.8),
+            hjust = -0.1,
+            size = 3.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1.1)) +
+  scale_fill_manual(values = c("Morador de Cananéia" = "gray80",
+                               "Turista" = "gray50")) +
+  labs(x = "Frequência relativa",
+       y = NULL,
+       fill = NULL,
+       title = "Percepção sobre seguimento das recomendações de conduta") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 13, hjust = 3),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+# Salvar o gráfico
+ggsave("03_results/grafico_seguidas_conduta.png", grafico_seguidas_conduta, width = 6, height = 5, dpi = 300)
+```
+![](../03_results/grafico_seguidas_conduta.png)
+
+
+### Valor do passeio {.column width=900}
+```{r grafico_valor_passeio, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
+df_passeio_barco <- 
+  dados_2 %>%
+  filter(pergunta_num == 4) %>%
+  na.omit() %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%"),
+    resposta = recode(resposta,
+      "Fiz e achei justo" = "Fiz e achei\njusto",
+      "Fiz e achei barato" = "Fiz e achei\nbarato",
+      "Não fiz passeio" = "Não fiz\npasseio",
+      "Desejo não responder" = "Desejo\nnão responder"
+    ),
+    resposta = factor(resposta, levels = c(
+      "Não fiz\npasseio",
+      "Desejo\nnão responder",
+      "Fiz e achei\nbarato",
+      "Fiz e achei\njusto",
+      "Fiz e achei\ncaro"
+    ))
+  ) %>%
+  ungroup() %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
+
+# Gráfico de barras horizontais
+grafico_valor_passeio <- ggplot(df_passeio_barco, aes(x = perc, y = resposta, fill = tipo)) +
+  geom_col(position = "dodge", width = 0.8) +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.8),
+            hjust = -0.1,
+            size = 3.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1.1)) +
+  scale_fill_manual(values = c("Morador de Cananéia" = "gray80",
+                               "Turista" = "gray50")) +
+  labs(x = "Frequência relativa",
+       y = NULL,
+       fill = NULL,
+       title = "Opinião sobre valor dos passeios de barco") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 14, hjust = 0),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+# Salvar o gráfico
+ggsave("03_results/grafico_valor_passeio.png", grafico_valor_passeio, width = 6, height = 5, dpi = 300)
+```
+![](../03_results/grafico_valor_passeio.png)
+
+
+### Info durante passeio? {.column width=900}
+```{r grafico_info_passeio, echo=FALSE, fig.align='center', fig.width=6, fig.height=5}
+df_info_regiao <- 
+  dados_2 %>%
+  filter(pergunta_num == 5) %>%
+  na.omit() %>%
+  count(tipo, resposta) %>%
+  group_by(tipo) %>%
+  mutate(
+    perc = n / sum(n),
+    label = paste0(round(perc * 100), "%"),
+    resposta = recode(resposta,
+      "Recebi informações e achei de qualidade" = "Recebi informações\ne achei de qualidade",
+      "Recebi informações, mas não achei de qualidade" = "Recebi informações,\nmas não achei de qualidade",
+      "Não recebi informação, mas gostaria de receber" = "Não recebi informação,\nmas gostaria de receber",
+      "Desejo não responder" = "Desejo\nnão responder"
+    ),
+    resposta = factor(resposta, levels = c(
+      "Não recebi informação,\nmas gostaria de receber",
+      "Desejo\nnão responder",
+      "Recebi informações,\nmas não achei de qualidade",
+      "Recebi informações\ne achei de qualidade"
+    ))
+  ) %>%
+  ungroup() %>%
+  tidyr::complete(resposta, tipo, fill = list(perc = 0, n = 0, label = ""))
+
+# Gráfico de barras horizontais
+grafico_info_passeio <- ggplot(df_info_regiao, aes(x = perc, y = resposta, fill = tipo)) +
+  geom_col(position = "dodge", width = 0.8) +
+  geom_text(aes(label = label),
+            position = position_dodge(width = 0.8),
+            hjust = -0.1,
+            size = 3.5) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1.1)) +
+  scale_fill_manual(values = c("Morador de Cananéia" = "gray80",
+                               "Turista" = "gray50")) +
+  labs(x = "Frequência relativa",
+       y = NULL,
+       fill = NULL,
+       title = "Informações sobre a região recebidas durante o passeio") +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 13, hjust = 3),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+# Salvar o gráfico
+ggsave("03_results/grafico_info_passeio.png", grafico_info_passeio, width = 6, height = 5, dpi = 300)
+```
+![](../03_results/grafico_info_passeio.png)
